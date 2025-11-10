@@ -1,65 +1,70 @@
-import Image from "next/image";
+'use client';
+
+import Link from "next/link";
+import { useTranslation } from "@/hooks/useTranslation";
+
+const sections = [
+  {
+    titleKey: "notes",
+    description:
+      "Generate, edit, and merge structured study notes. Templates keep vocabulary organized and dialogs fresh.",
+    href: "/note",
+    cta: "Open Notes",
+  },
+  {
+    titleKey: "simulateDialog",
+    description:
+      "Prototype everyday or formal conversations. Quickly stage characters and export transcripts into notes.",
+    href: "/dialog",
+    cta: "Start a dialog",
+  },
+  {
+    titleKey: "superExtension",
+    description:
+      "Map vocabulary into a living network. Track relations, counts, and play memory games with each session.",
+    href: "/extension",
+    cta: "Explore network",
+  },
+];
 
 export default function Home() {
+  const { t } = useTranslation();
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
+    <div className="space-y-10">
+      <section className="rounded-3xl border border-surface-200 bg-surface-50 p-10 shadow-sm dark:border-surface-700 dark:bg-surface-950">
+        <div className="max-w-2xl space-y-4">
+          <span className="inline-flex items-center rounded-full bg-primary-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary-700 dark:bg-primary-900 dark:text-primary-100">
+            {t("appTitle")}
+          </span>
+          <h1 className="text-4xl font-bold leading-tight">
+            Build a durable language routine with notes, dialogs, and vocabulary networks.
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+          <p className="text-lg text-muted-foreground">
+            Capture study notes, simulate conversations, and grow word families without relying on AI. Everything stays in IndexedDB and local storage for instant recall.
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+      </section>
+
+      <section className="grid gap-6 md:grid-cols-3">
+        {sections.map((section) => (
+          <div
+            key={section.href}
+            className="flex h-full flex-col justify-between rounded-2xl border border-surface-200 bg-white p-6 shadow-sm transition hover:border-primary-300 hover:shadow-md dark:border-surface-700 dark:bg-surface-900"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+            <div className="space-y-3">
+              <h2 className="text-xl font-semibold">{t(section.titleKey)}</h2>
+              <p className="text-sm text-muted-foreground">{section.description}</p>
+            </div>
+            <Link
+              href={section.href}
+              className="mt-6 inline-flex items-center justify-center rounded-full bg-primary-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-600"
+            >
+              {section.cta}
+            </Link>
+          </div>
+        ))}
+      </section>
     </div>
   );
 }

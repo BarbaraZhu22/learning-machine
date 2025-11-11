@@ -1,5 +1,6 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { NoteRecord, VocabularyEntry } from '@/types';
+import { defaultLearningLanguage } from '@/data/learningLanguages';
 
 interface LearningMachineDB extends DBSchema {
   notes: {
@@ -13,19 +14,42 @@ interface LearningMachineDB extends DBSchema {
 }
 
 const DB_NAME = 'learning-machine';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbPromise: Promise<IDBPDatabase<LearningMachineDB>> | null = null;
 
 const getDb = () => {
   if (!dbPromise) {
     dbPromise = openDB<LearningMachineDB>(DB_NAME, DB_VERSION, {
-      upgrade(db) {
+      upgrade(db, oldVersion, _newVersion, transaction) {
         if (!db.objectStoreNames.contains('notes')) {
           db.createObjectStore('notes', { keyPath: 'id' });
         }
         if (!db.objectStoreNames.contains('vocabulary')) {
           db.createObjectStore('vocabulary', { keyPath: 'id' });
+        }
+
+        if (oldVersion < 2) {
+          const noteStore = transaction.objectStore('notes');
+          const vocabStore = transaction.objectStore('vocabulary');
+
+          noteStore.getAll().onsuccess = (event) => {
+            const result = (event.target as IDBRequest<NoteRecord[]>).result;
+            result.forEach((note) => {
+              if (!note.learningLanguage) {
+                noteStore.put({ ...note, learningLanguage: defaultLearningLanguage });
+              }
+            });
+          };
+
+          vocabStore.getAll().onsuccess = (event) => {
+            const result = (event.target as IDBRequest<VocabularyEntry[]>).result;
+            result.forEach((entry) => {
+              if (!entry.learningLanguage) {
+                vocabStore.put({ ...entry, learningLanguage: defaultLearningLanguage });
+              }
+            });
+          };
         }
       },
     });
@@ -36,7 +60,11 @@ const getDb = () => {
 export const indexedDbClient = {
   async getAllNotes(): Promise<NoteRecord[]> {
     const db = await getDb();
-    return db.getAll('notes');
+    const notes = await db.getAll('notes');
+    return notes.map((note) => ({
+      ...note,
+      learningLanguage: note.learningLanguage ?? defaultLearningLanguage,
+    }));
   },
 
   async saveNote(note: NoteRecord): Promise<void> {
@@ -51,7 +79,11 @@ export const indexedDbClient = {
 
   async getAllVocabulary(): Promise<VocabularyEntry[]> {
     const db = await getDb();
-    return db.getAll('vocabulary');
+    const vocabulary = await db.getAll('vocabulary');
+    return vocabulary.map((entry) => ({
+      ...entry,
+      learningLanguage: entry.learningLanguage ?? defaultLearningLanguage,
+    }));
   },
 
   async saveVocabulary(entry: VocabularyEntry): Promise<void> {

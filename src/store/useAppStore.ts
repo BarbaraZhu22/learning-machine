@@ -3,8 +3,10 @@
 import { create } from 'zustand';
 import { devtools, persist, createJSONStorage } from 'zustand/middleware';
 import { defaultNoteTemplates } from '@/data/noteTemplates';
+import { defaultLearningLanguage } from '@/data/learningLanguages';
 import {
   LanguageCode,
+  LearningLanguageCode,
   NoteRecord,
   NoteTemplate,
   ThemeMode,
@@ -30,11 +32,13 @@ type VocabularyDraft = {
 interface AppState {
   theme: ThemeMode;
   language: LanguageCode;
+  learningLanguage: LearningLanguageCode;
   noteTemplates: NoteTemplate[];
   notes: NoteRecord[];
   vocabulary: VocabularyEntry[];
   setTheme: (theme: ThemeMode) => void;
   setLanguage: (language: LanguageCode) => void;
+  setLearningLanguage: (language: LearningLanguageCode) => void;
   setNoteTemplates: (templates: NoteTemplate[]) => void;
   upsertTemplate: (template: NoteTemplate) => void;
   removeTemplate: (id: string) => void;
@@ -67,9 +71,10 @@ const settingsStorage = createJSONStorage(() => {
 export const useAppStore = create<AppState>()(
   devtools(
     persist(
-      (set) => ({
+      (set, get) => ({
         theme: 'system',
         language: 'en',
+        learningLanguage: defaultLearningLanguage,
         noteTemplates: defaultNoteTemplates,
         notes: [],
         vocabulary: [],
@@ -77,6 +82,8 @@ export const useAppStore = create<AppState>()(
         setTheme: (theme) => set({ theme }),
 
         setLanguage: (language) => set({ language }),
+
+        setLearningLanguage: (learningLanguage) => set({ learningLanguage }),
 
         setNoteTemplates: (templates) => set({ noteTemplates: [...templates] }),
 
@@ -99,11 +106,13 @@ export const useAppStore = create<AppState>()(
         setNotes: (notes) => set({ notes: [...notes] }),
 
         addNote: async (draft) => {
+          const learningLanguage = get().learningLanguage;
           const note: NoteRecord = {
             id: createId(),
             title: draft.title,
             content: draft.content,
             templateId: draft.templateId,
+            learningLanguage,
             createdAt: now(),
             updatedAt: now(),
           };
@@ -144,9 +153,11 @@ export const useAppStore = create<AppState>()(
         setVocabulary: (entries) => set({ vocabulary: [...entries] }),
 
         addVocabulary: async (draft) => {
+          const learningLanguage = get().learningLanguage;
           const entry: VocabularyEntry = {
             id: createId(),
             word: draft.word,
+            learningLanguage,
             meaning: draft.meaning,
             notes: draft.notes,
             tags: draft.tags ?? [],
@@ -198,6 +209,7 @@ export const useAppStore = create<AppState>()(
         partialize: (state) => ({
           theme: state.theme,
           language: state.language,
+          learningLanguage: state.learningLanguage,
           noteTemplates: state.noteTemplates,
         }),
       },
@@ -207,6 +219,7 @@ export const useAppStore = create<AppState>()(
 
 export const selectTheme = (state: AppState) => state.theme;
 export const selectLanguage = (state: AppState) => state.language;
+export const selectLearningLanguage = (state: AppState) => state.learningLanguage;
 export const selectNoteTemplates = (state: AppState) => state.noteTemplates;
 export const selectNotes = (state: AppState) => state.notes;
 export const selectVocabulary = (state: AppState) => state.vocabulary;

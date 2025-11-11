@@ -2,6 +2,8 @@ export type ThemeMode = 'light' | 'dark' | 'system';
 
 export type LanguageCode = 'en' | 'zh';
 
+export type LearningLanguageCode = 'english' | 'spanish' | 'french' | 'japanese' | 'chinese';
+
 export type RelationType = 'similar' | 'synonym' | 'antonym' | 'root' | 'homophone';
 
 export interface TemplateSection {
@@ -24,6 +26,7 @@ export interface NoteRecord {
   title: string;
   content: string;
   templateId?: string;
+  learningLanguage: LearningLanguageCode;
   createdAt: string;
   updatedAt: string;
 }
@@ -37,6 +40,7 @@ export interface VocabularyRelation {
 export interface VocabularyEntry {
   id: string;
   word: string;
+  learningLanguage: LearningLanguageCode;
   meaning?: string;
   notes?: string;
   relations: VocabularyRelation[];

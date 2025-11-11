@@ -1,9 +1,10 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { RelationType, VocabularyEntry, VocabularyRelation } from '@/types';
-import { useAppStore, selectVocabulary } from '@/store/useAppStore';
+import { useAppStore, selectVocabulary, selectLearningLanguage } from '@/store/useAppStore';
 import { useTranslation } from '@/hooks/useTranslation';
+import { learningLanguages } from '@/data/learningLanguages';
 
 const RELATION_LABELS: Record<RelationType, string> = {
   similar: 'Similar',
@@ -54,7 +55,8 @@ const computePositions = (entries: VocabularyEntry[]): PositionMap => {
 
 export const LinkNetwork = () => {
   const { t } = useTranslation();
-  const vocabulary = useAppStore(selectVocabulary);
+  const allVocabulary = useAppStore(selectVocabulary);
+  const learningLanguage = useAppStore(selectLearningLanguage);
   const addVocabulary = useAppStore((state) => state.addVocabulary);
   const updateVocabulary = useAppStore((state) => state.updateVocabulary);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -62,6 +64,21 @@ export const LinkNetwork = () => {
   const [targetId, setTargetId] = useState<string>('new');
   const [newWord, setNewWord] = useState('');
   const [newMeaning, setNewMeaning] = useState('');
+
+  useEffect(() => {
+    setSelectedId(null);
+    setTargetId('new');
+    setNewWord('');
+    setNewMeaning('');
+  }, [learningLanguage]);
+
+  const learningLanguageLabel =
+    learningLanguages.find((item) => item.code === learningLanguage)?.label ?? learningLanguage;
+
+  const vocabulary = useMemo(
+    () => allVocabulary.filter((entry) => entry.learningLanguage === learningLanguage),
+    [allVocabulary, learningLanguage],
+  );
 
   const positions = useMemo(() => computePositions(vocabulary), [vocabulary]);
   const edges = useMemo(
@@ -139,8 +156,15 @@ export const LinkNetwork = () => {
   return (
     <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
       <div className="rounded-lg border border-surface-200 bg-white p-4 dark:border-surface-700 dark:bg-surface-900">
-        <h3 className="text-lg font-semibold">{t('linkNetwork')}</h3>
-        <p className="mb-4 text-sm text-muted-foreground">{t('selectNode')}</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-semibold">{t('linkNetwork')}</h3>
+            <p className="text-sm text-muted-foreground">{t('selectNode')}</p>
+          </div>
+          <div className="text-xs text-muted-foreground">
+            {t('learningLanguage')}: <span className="font-semibold">{learningLanguageLabel}</span>
+          </div>
+        </div>
 
         <div className="relative h-[400px] w-full overflow-hidden rounded-md border border-surface-200 bg-surface-50 dark:border-surface-700 dark:bg-surface-950">
           <svg viewBox={`0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`} className="h-full w-full">

@@ -4,7 +4,8 @@ import { FormEvent, useMemo, useState } from 'react';
 import { useTranslation } from '@/hooks/useTranslation';
 import { aiHints } from '@/data/aiPrompts';
 import { DialogScenario } from '@/types';
-import { useAppStore } from '@/store/useAppStore';
+import { selectLearningLanguage, useAppStore } from '@/store/useAppStore';
+import { learningLanguages } from '@/data/learningLanguages';
 
 const createId = () =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -26,6 +27,9 @@ const buildDialog = (scenario: DialogScenario) => {
 export const DialogSimulator = () => {
   const { t } = useTranslation();
   const addNote = useAppStore((state) => state.addNote);
+  const learningLanguage = useAppStore(selectLearningLanguage);
+  const learningLanguageLabel =
+    learningLanguages.find((item) => item.code === learningLanguage)?.label ?? learningLanguage;
   const [situation, setSituation] = useState('');
   const [characterA, setCharacterA] = useState('');
   const [characterB, setCharacterB] = useState('');
@@ -67,8 +71,15 @@ export const DialogSimulator = () => {
   return (
     <div className="space-y-6">
       <div className="rounded-lg border border-surface-200 bg-surface-50 p-4 dark:border-surface-700 dark:bg-surface-950">
-        <h3 className="text-lg font-semibold">{t('simulateDialog')}</h3>
-        <p className="text-sm text-muted-foreground">{aiHints.dialogSimulation}</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-semibold">{t('simulateDialog')}</h3>
+            <p className="text-sm text-muted-foreground">{aiHints.dialogSimulation}</p>
+          </div>
+          <div className="text-xs text-muted-foreground">
+            {t('learningLanguage')}: <span className="font-semibold">{learningLanguageLabel}</span>
+          </div>
+        </div>
       </div>
 
       <form className="space-y-4 rounded-lg border border-surface-200 bg-white p-4 dark:border-surface-700 dark:bg-surface-900" onSubmit={handleSubmit}>

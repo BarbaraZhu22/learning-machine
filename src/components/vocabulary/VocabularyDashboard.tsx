@@ -1,9 +1,10 @@
 'use client';
 
-import { FormEvent, useMemo, useState } from 'react';
-import { useAppStore, selectVocabulary } from '@/store/useAppStore';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { useAppStore, selectVocabulary, selectLearningLanguage } from '@/store/useAppStore';
 import { VocabularyEntry } from '@/types';
 import { useTranslation } from '@/hooks/useTranslation';
+import { learningLanguages } from '@/data/learningLanguages';
 
 type EditingState = {
   id: string;
@@ -15,7 +16,8 @@ type EditingState = {
 
 export const VocabularyDashboard = () => {
   const { t } = useTranslation();
-  const vocabulary = useAppStore(selectVocabulary);
+  const allVocabulary = useAppStore(selectVocabulary);
+  const learningLanguage = useAppStore(selectLearningLanguage);
   const addVocabulary = useAppStore((state) => state.addVocabulary);
   const updateVocabulary = useAppStore((state) => state.updateVocabulary);
   const removeVocabulary = useAppStore((state) => state.removeVocabulary);
@@ -26,6 +28,19 @@ export const VocabularyDashboard = () => {
   const [tags, setTags] = useState('');
   const [editing, setEditing] = useState<EditingState>(null);
   const [filter, setFilter] = useState('');
+
+  useEffect(() => {
+    setEditing(null);
+    setFilter('');
+  }, [learningLanguage]);
+
+  const learningLanguageLabel =
+    learningLanguages.find((item) => item.code === learningLanguage)?.label ?? learningLanguage;
+
+  const vocabulary = useMemo(
+    () => allVocabulary.filter((entry) => entry.learningLanguage === learningLanguage),
+    [allVocabulary, learningLanguage],
+  );
 
   const filteredVocabulary = useMemo(() => {
     if (!filter.trim()) return vocabulary;
@@ -136,6 +151,9 @@ export const VocabularyDashboard = () => {
         <div>
           <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t('totalVocabulary')}</div>
           <div className="text-2xl font-bold">{vocabulary.length}</div>
+          <div className="text-xs text-muted-foreground">
+            {t('learningLanguage')}: <span className="font-semibold">{learningLanguageLabel}</span>
+          </div>
         </div>
         <input
           className="max-w-xs flex-1 rounded-md border border-surface-300 bg-white px-3 py-2 text-sm dark:border-surface-600 dark:bg-surface-800"

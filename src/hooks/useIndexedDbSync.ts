@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { indexedDbClient } from '@/lib/indexedDb';
+import { defaultLearningLanguage } from '@/data/learningLanguages';
 import { useAppStore } from '@/store/useAppStore';
 
 export const useIndexedDbSync = () => {
@@ -18,8 +19,18 @@ export const useIndexedDbSync = () => {
           indexedDbClient.getAllVocabulary(),
         ]);
         if (!cancelled) {
-          setNotes(notes);
-          setVocabulary(vocabulary);
+          setNotes(
+            notes.map((note) => ({
+              ...note,
+              learningLanguage: note.learningLanguage ?? defaultLearningLanguage,
+            })),
+          );
+          setVocabulary(
+            vocabulary.map((entry) => ({
+              ...entry,
+              learningLanguage: entry.learningLanguage ?? defaultLearningLanguage,
+            })),
+          );
         }
       } catch (error) {
         console.error('Failed to load IndexedDB data', error);

@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useTranslation } from "@/hooks/useTranslation";
+import { learningLanguages } from "@/data/learningLanguages";
+import { selectLearningLanguage, useAppStore } from "@/store/useAppStore";
 
 const sections = [
   {
@@ -29,6 +31,8 @@ const sections = [
 
 export default function Home() {
   const { t } = useTranslation();
+  const learningLanguage = useAppStore(selectLearningLanguage);
+  const setLearningLanguage = useAppStore((state) => state.setLearningLanguage);
 
   return (
     <div className="space-y-10">
@@ -43,6 +47,24 @@ export default function Home() {
           <p className="text-lg text-muted-foreground">
             Capture study notes, simulate conversations, and grow word families without relying on AI. Everything stays in IndexedDB and local storage for instant recall.
           </p>
+        </div>
+
+        <div className="mt-8 max-w-md rounded-2xl border border-surface-200 bg-white p-4 shadow-sm dark:border-surface-700 dark:bg-surface-900">
+          <label className="flex flex-col gap-2 text-sm font-medium">
+            <span>{t("learningLanguage")}</span>
+            <span className="text-xs font-normal text-muted-foreground">{t("chooseLearningLanguage")}</span>
+            <select
+              className="rounded-md border border-surface-300 bg-surface-50 px-3 py-2 text-sm dark:border-surface-600 dark:bg-surface-800"
+              value={learningLanguage}
+              onChange={(event) => setLearningLanguage(event.target.value as typeof learningLanguage)}
+            >
+              {learningLanguages.map((option) => (
+                <option key={option.code} value={option.code}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
       </section>
 

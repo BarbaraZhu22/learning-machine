@@ -55,10 +55,10 @@
   --accent-100: #881337;
   --accent-200: #be123c;
   --accent-500: #fb7185;
-  --destructive-50: #2d0808;
+  --destructive-50: #fef2f2;
   --destructive-400: #f87171;
-  --destructive-500: #fca5a5;
-  --destructive-600: #ef4444;
+  --destructive-500: #ef4444;
+  --destructive-600: #dc2626;
   --muted-foreground: #e2e8f0;
   --text-primary: #f8fafc;
   --text-inverse: #1e293b;
@@ -95,9 +95,61 @@
 }
 
 body {
-  background: linear-gradient(180deg, var(--surface-50) 0%, #ffffff 80%);
+  background: linear-gradient(180deg, var(--surface-950) 0%, var(--surface-300) 55%, var(--surface-50) 100%);
   color: var(--text-primary);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+html[data-theme="dark"] body {
+  background: linear-gradient(180deg, var(--surface-950) 0%, var(--surface-700) 50%, var(--surface-300) 100%);
+}
+
+.app-shell {
+  border: 1px solid var(--surface-200);
+  border-radius: 1.5rem;
+  background-color: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 24px 60px -25px rgba(15, 23, 42, 0.35);
+  backdrop-filter: blur(16px);
+}
+
+html[data-theme="dark"] .app-shell {
+  border-color: rgba(148, 163, 184, 0.35);
+  background-color: rgba(15, 23, 42, 0.78);
+  box-shadow: 0 24px 60px -25px rgba(15, 23, 42, 0.65);
+}
+
+.app-card {
+  position: relative;
+  padding: 1.5rem;
+  border-radius: 1.25rem;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  box-shadow: 0 16px 40px -24px rgba(15, 23, 42, 0.45);
+}
+
+.app-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 2px;
+  background: linear-gradient(135deg, var(--primary-400), var(--accent-200));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0.55;
+  transition: opacity 150ms ease, transform 150ms ease;
+}
+
+.app-card:hover::before {
+  opacity: 0.85;
+  transform: translateY(-1px);
+}
+
+html[data-theme="dark"] .app-card {
+  background: rgba(15, 23, 42, 0.9);
+  border-color: rgba(148, 163, 184, 0.25);
+  box-shadow: 0 16px 40px -24px rgba(15, 23, 42, 0.75);
 }
 
 .text-muted-foreground {

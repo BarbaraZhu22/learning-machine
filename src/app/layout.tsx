@@ -27,11 +27,11 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} min-h-screen bg-surface-100 text-surface-900 antialiased dark:bg-surface-950 dark:text-surface-50`}
+        className={`${geistSans.variable} ${geistMono.variable} min-h-screen text-surface-900 antialiased transition-colors dark:text-surface-50`}
       >
         <AppProviders>
           <SiteHeader />
-          <main className="mx-auto min-h-[calc(100vh-4rem)] w-full max-w-6xl px-4 py-8">
+          <main className="app-shell mx-auto min-h-[calc(100vh-4rem)] w-full max-w-6xl px-4 py-8">
             {children}
           </main>
         </AppProviders>

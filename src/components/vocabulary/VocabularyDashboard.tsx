@@ -147,7 +147,7 @@ export const VocabularyDashboard = () => {
         </button>
       </form>
 
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-surface-200 bg-white p-4 dark:border-surface-700 dark:bg-surface-900">
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-transparent bg-white/90 p-4 shadow-lg shadow-primary-100/40 backdrop-blur dark:border-surface-700 dark:bg-surface-900">
         <div>
           <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t('totalVocabulary')}</div>
           <div className="text-2xl font-bold">{vocabulary.length}</div>
@@ -167,7 +167,7 @@ export const VocabularyDashboard = () => {
         {filteredVocabulary.map((entry) => (
           <div
             key={entry.id}
-            className="rounded-lg border border-surface-200 bg-white p-4 text-sm dark:border-surface-700 dark:bg-surface-900"
+            className="rounded-lg border border-transparent bg-white/90 p-4 text-sm shadow-lg shadow-primary-100/40 transition hover:-translate-y-0.5 dark:border-surface-700 dark:bg-surface-900"
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>

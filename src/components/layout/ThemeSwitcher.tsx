@@ -21,10 +21,10 @@ export const ThemeSwitcher = () => {
   };
 
   return (
-    <label className="flex items-center gap-2 text-sm font-medium">
+    <label className="flex items-center gap-2 rounded-full bg-white/60 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary-700 shadow-sm backdrop-blur dark:bg-surface-800/70 dark:text-primary-200">
       <span>{t('theme')}</span>
       <select
-        className="rounded-md border border-surface-300 bg-surface-100 px-2 py-1 text-sm outline-none transition focus:border-primary-400 dark:border-surface-700 dark:bg-surface-900"
+        className="rounded-full border border-primary-200 bg-transparent px-2 py-1 text-xs font-medium text-primary-700 outline-none transition focus:border-primary-400 dark:border-surface-600 dark:text-primary-200"
         value={theme}
         onChange={handleChange}
       >

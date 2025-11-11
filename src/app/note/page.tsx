@@ -34,16 +34,13 @@ export default function NotePage() {
 
   return (
     <div className="space-y-8">
-      <section className="space-y-4 rounded-xl border border-surface-200 bg-white p-6 shadow-sm dark:border-surface-700 dark:bg-surface-900">
+      <section className="space-y-4 rounded-xl border border-transparent bg-gradient-to-r from-primary-50 via-surface-50 to-accent-50 p-6 shadow-lg shadow-primary-100/60 dark:border-surface-700 dark:bg-surface-900">
         <div className="flex flex-col gap-2 md:flex-row md:items-baseline md:justify-between">
-          <h1 className="text-3xl font-semibold">{t('notes')}</h1>
-          <span className="text-sm text-muted-foreground">
+          <h1 className="text-3xl font-semibold text-primary-700 dark:text-primary-200">{t('notes')}</h1>
+          <span className="text-sm text-primary-700/80 dark:text-primary-100/80">
             {t('learningLanguage')}: <strong className="font-semibold">{learningLanguageLabel}</strong>
           </span>
         </div>
-        <p className="text-sm text-muted-foreground">
-          Design templates, generate markdown, and maintain a local library of study notes backed by IndexedDB.
-        </p>
         <NoteTemplateManager />
       </section>
 
@@ -65,11 +62,8 @@ export default function NotePage() {
         </div>
       </section>
 
-      <section className="rounded-xl border border-surface-200 bg-white p-6 shadow-sm dark:border-surface-700 dark:bg-surface-900">
-        <h2 className="text-2xl font-semibold">{t('noteReader')}</h2>
-        <p className="text-sm text-muted-foreground">
-          Load any markdown note from IndexedDB, make revisions, and save instantly.
-        </p>
+      <section className="rounded-xl border border-transparent bg-white/90 p-6 shadow-lg shadow-primary-100/60 backdrop-blur dark:border-surface-700 dark:bg-surface-900">
+        <h2 className="text-2xl font-semibold text-primary-700 dark:text-primary-200">{t('noteReader')}</h2>
         <div className="mt-4">
           <NoteReader
             note={editorNote}

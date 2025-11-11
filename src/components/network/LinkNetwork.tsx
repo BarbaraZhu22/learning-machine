@@ -155,13 +155,13 @@ export const LinkNetwork = () => {
 
   return (
     <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-      <div className="rounded-lg border border-surface-200 bg-white p-4 dark:border-surface-700 dark:bg-surface-900">
+      <div className="rounded-lg border border-transparent bg-white/90 p-4 shadow-lg shadow-primary-100/40 backdrop-blur dark:border-surface-700 dark:bg-surface-900">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-lg font-semibold">{t('linkNetwork')}</h3>
-            <p className="text-sm text-muted-foreground">{t('selectNode')}</p>
+            <h3 className="text-lg font-semibold text-primary-700 dark:text-primary-200">{t('linkNetwork')}</h3>
+            <p className="text-sm text-primary-700/80 dark:text-primary-100/80">{t('selectNode')}</p>
           </div>
-          <div className="text-xs text-muted-foreground">
+          <div className="text-xs text-primary-700/80 dark:text-primary-100/80">
             {t('learningLanguage')}: <span className="font-semibold">{learningLanguageLabel}</span>
           </div>
         </div>
@@ -219,7 +219,7 @@ export const LinkNetwork = () => {
         </div>
       </div>
 
-      <div className="space-y-4 rounded-lg border border-surface-200 bg-surface-50 p-4 text-sm dark:border-surface-700 dark:bg-surface-950">
+      <div className="space-y-4 rounded-lg border border-transparent bg-white/90 p-4 text-sm shadow-lg shadow-primary-100/40 backdrop-blur dark:border-surface-700 dark:bg-surface-950">
         <h4 className="text-base font-semibold">{t('vocabularyGame')}</h4>
 
         {selectedEntry ? (
@@ -238,10 +238,10 @@ export const LinkNetwork = () => {
                 {(Object.keys(RELATION_LABELS) as RelationType[]).map((type) => (
                   <button
                     key={type}
-                    className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                    className={`rounded-full px-3 py-1 text-xs font-semibold shadow-sm transition ${
                       relationType === type
-                        ? 'bg-primary-500 text-white'
-                        : 'bg-surface-200 text-surface-800 dark:bg-surface-800 dark:text-surface-200'
+                        ? 'bg-gradient-to-r from-primary-400 to-accent-200 text-white shadow-primary-200/60'
+                        : 'bg-white/80 text-primary-700 hover:bg-white dark:bg-surface-800 dark:text-surface-200'
                     }`}
                     onClick={() => setRelationType(type)}
                   >
@@ -289,7 +289,7 @@ export const LinkNetwork = () => {
             </div>
 
             <button
-              className="w-full rounded-md bg-primary-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-primary-600"
+              className="w-full rounded-full bg-gradient-to-r from-primary-400 to-accent-200 px-3 py-2 text-sm font-semibold text-white shadow-md transition hover:brightness-105"
               onClick={handleAddRelation}
             >
               Add relation
@@ -304,7 +304,7 @@ export const LinkNetwork = () => {
                     return (
                       <li
                         key={relation.id}
-                        className="flex items-center justify-between rounded-md border border-surface-200 bg-white px-3 py-2 dark:border-surface-700 dark:bg-surface-900"
+                        className="flex items-center justify-between rounded-md border border-transparent bg-white/90 px-3 py-2 shadow-sm shadow-primary-100/40 dark:border-surface-700 dark:bg-surface-900"
                       >
                         <div>
                           <div className="font-medium">{target?.word ?? relation.targetId}</div>

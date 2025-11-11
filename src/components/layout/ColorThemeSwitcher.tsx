@@ -1,31 +1,29 @@
 'use client';
 
 import { ChangeEvent } from 'react';
-import { supportedLanguages } from '@/data/languages';
-import { useAppStore, selectLanguage } from '@/store/useAppStore';
-import { LanguageCode } from '@/types';
-import { useTranslation } from '@/hooks/useTranslation';
+import { colorThemes } from '@/data/colorThemes';
+import { useAppStore, selectColorTheme } from '@/store/useAppStore';
+import { ColorThemeKey } from '@/types';
 
-export const LanguageSwitcher = () => {
-  const { t } = useTranslation();
-  const language = useAppStore(selectLanguage);
-  const setLanguage = useAppStore((state) => state.setLanguage);
+export const ColorThemeSwitcher = () => {
+  const colorTheme = useAppStore(selectColorTheme);
+  const setColorTheme = useAppStore((state) => state.setColorTheme);
 
   const handleChange = (event: ChangeEvent<HTMLSelectElement>) => {
-    setLanguage(event.target.value as LanguageCode);
+    setColorTheme(event.target.value as ColorThemeKey);
   };
 
   return (
     <label className="flex items-center gap-2 rounded-full bg-white/60 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary-700 shadow-sm backdrop-blur dark:bg-surface-800/70 dark:text-primary-200">
-      <span>{t('language')}</span>
+      <span>Colors</span>
       <select
         className="rounded-full border border-primary-200 bg-transparent px-2 py-1 text-xs font-medium text-primary-700 outline-none transition focus:border-primary-400 dark:border-surface-600 dark:text-primary-200"
-        value={language}
+        value={colorTheme}
         onChange={handleChange}
       >
-        {supportedLanguages.map((lang) => (
-          <option key={lang.code} value={lang.code}>
-            {lang.label}
+        {colorThemes.map((theme) => (
+          <option key={theme.key} value={theme.key}>
+            {theme.label}
           </option>
         ))}
       </select>

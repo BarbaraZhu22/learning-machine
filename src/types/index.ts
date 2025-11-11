@@ -4,6 +4,8 @@ export type LanguageCode = 'en' | 'zh';
 
 export type LearningLanguageCode = 'english' | 'spanish' | 'french' | 'japanese' | 'chinese';
 
+export type ColorThemeKey = 'blue' | 'purple' | 'green' | 'grey';
+
 export type RelationType = 'similar' | 'synonym' | 'antonym' | 'root' | 'homophone';
 
 export interface TemplateSection {

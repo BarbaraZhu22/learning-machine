@@ -27,7 +27,7 @@ export const HistoryNotes = ({ notes, onSelect, onDelete }: HistoryNotesProps) =
         {notes.map((note) => (
           <div
             key={note.id}
-            className="flex items-center justify-between rounded-md border border-surface-200 bg-white px-3 py-2 text-sm dark:border-surface-700 dark:bg-surface-900"
+            className="flex items-center justify-between rounded-md border border-transparent bg-white/90 px-3 py-2 text-sm shadow-sm shadow-primary-100/40 transition hover:-translate-y-0.5 dark:border-surface-700 dark:bg-surface-900"
           >
             <div>
               <button className="font-medium hover:underline" onClick={() => onSelect(note)}>

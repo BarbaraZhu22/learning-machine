@@ -1,8 +1,9 @@
 'use client';
 
 import { PropsWithChildren, useEffect } from 'react';
-import { useAppStore, selectTheme } from '@/store/useAppStore';
+import { useAppStore, selectTheme, selectColorTheme } from '@/store/useAppStore';
 import { useIndexedDbSync } from '@/hooks/useIndexedDbSync';
+import { colorThemeMap, defaultColorTheme } from '@/data/colorThemes';
 
 const applyTheme = (mode: string) => {
   const root = document.documentElement;
@@ -14,8 +15,18 @@ const applyTheme = (mode: string) => {
   }
 };
 
-export const AppProviders = ({ children }: PropsWithChildren ) => {
+const setPalette = (mode: 'light' | 'dark', colorThemeKey: string) => {
+  const palette = (colorThemeMap[colorThemeKey as keyof typeof colorThemeMap] ??
+    colorThemeMap[defaultColorTheme])[mode];
+  const root = document.documentElement;
+  Object.entries(palette).forEach(([token, value]) => {
+    root.style.setProperty(`--${token}`, value);
+  });
+};
+
+export const AppProviders = ({ children }: PropsWithChildren) => {
   const theme = useAppStore(selectTheme);
+  const colorTheme = useAppStore(selectColorTheme);
   useIndexedDbSync();
 
   useEffect(() => {
@@ -24,23 +35,27 @@ export const AppProviders = ({ children }: PropsWithChildren ) => {
     }
 
     const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const applyMode = (mode: 'light' | 'dark') => {
+      applyTheme(mode);
+      setPalette(mode, colorTheme);
+    };
 
     const resolveTheme = () => {
       if (theme === 'system') {
-        applyTheme(media.matches ? 'dark' : 'light');
+        applyMode(media.matches ? 'dark' : 'light');
       } else {
-        applyTheme(theme);
+        applyMode(theme);
       }
     };
 
     resolveTheme();
 
     if (theme === 'system') {
-      const listener = (event: MediaQueryListEvent) => applyTheme(event.matches ? 'dark' : 'light');
+      const listener = (event: MediaQueryListEvent) => applyMode(event.matches ? 'dark' : 'light');
       media.addEventListener('change', listener);
       return () => media.removeEventListener('change', listener);
     }
-  }, [theme]);
+  }, [theme, colorTheme]);
 
   return <>{children}</>;
 };

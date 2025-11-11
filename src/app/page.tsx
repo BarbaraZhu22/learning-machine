@@ -6,27 +6,9 @@ import { learningLanguages } from "@/data/learningLanguages";
 import { selectLearningLanguage, useAppStore } from "@/store/useAppStore";
 
 const sections = [
-  {
-    titleKey: "notes",
-    description:
-      "Generate, edit, and merge structured study notes. Templates keep vocabulary organized and dialogs fresh.",
-    href: "/note",
-    cta: "Open Notes",
-  },
-  {
-    titleKey: "simulateDialog",
-    description:
-      "Prototype everyday or formal conversations. Quickly stage characters and export transcripts into notes.",
-    href: "/dialog",
-    cta: "Start a dialog",
-  },
-  {
-    titleKey: "superExtension",
-    description:
-      "Map vocabulary into a living network. Track relations, counts, and play memory games with each session.",
-    href: "/extension",
-    cta: "Explore network",
-  },
+  { titleKey: "notes", href: "/note", cta: "Open Notes" },
+  { titleKey: "simulateDialog", href: "/dialog", cta: "Start Dialog" },
+  { titleKey: "superExtension", href: "/extension", cta: "Open Extension" },
 ];
 
 export default function Home() {
@@ -36,25 +18,22 @@ export default function Home() {
 
   return (
     <div className="space-y-10">
-      <section className="rounded-3xl border border-surface-200 bg-surface-50 p-10 shadow-sm dark:border-surface-700 dark:bg-surface-950">
-        <div className="max-w-2xl space-y-4">
-          <span className="inline-flex items-center rounded-full bg-primary-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary-700 dark:bg-primary-900 dark:text-primary-100">
+      <section className="rounded-3xl border border-transparent bg-gradient-to-br from-primary-50 via-surface-50 to-accent-50 p-10 shadow-lg shadow-primary-50/60 dark:border-surface-700 dark:bg-surface-950">
+        <div className="max-w-2xl space-y-5">
+          <h1 className="text-4xl font-bold leading-tight text-primary-800 dark:text-primary-200">
             {t("appTitle")}
-          </span>
-          <h1 className="text-4xl font-bold leading-tight">
-            Build a durable language routine with notes, dialogs, and vocabulary networks.
           </h1>
-          <p className="text-lg text-muted-foreground">
-            Capture study notes, simulate conversations, and grow word families without relying on AI. Everything stays in IndexedDB and local storage for instant recall.
+          <p className="text-base text-primary-700/80 dark:text-primary-100/80">
+            Quick launch your study tools.
           </p>
         </div>
 
-        <div className="mt-8 max-w-md rounded-2xl border border-surface-200 bg-white p-4 shadow-sm dark:border-surface-700 dark:bg-surface-900">
-          <label className="flex flex-col gap-2 text-sm font-medium">
+        <div className="mt-10 max-w-md rounded-2xl border border-white/40 bg-white/80 p-4 shadow-lg backdrop-blur dark:border-surface-700 dark:bg-surface-900">
+          <label className="flex flex-col gap-2 text-sm font-medium text-primary-800 dark:text-primary-100">
             <span>{t("learningLanguage")}</span>
             <span className="text-xs font-normal text-muted-foreground">{t("chooseLearningLanguage")}</span>
             <select
-              className="rounded-md border border-surface-300 bg-surface-50 px-3 py-2 text-sm dark:border-surface-600 dark:bg-surface-800"
+              className="rounded-md border border-primary-200 bg-surface-50 px-3 py-2 text-sm text-primary-800 shadow-inner transition focus:border-primary-400 focus:ring-2 focus:ring-primary-200 dark:border-surface-600 dark:bg-surface-800 dark:text-primary-100"
               value={learningLanguage}
               onChange={(event) => setLearningLanguage(event.target.value as typeof learningLanguage)}
             >
@@ -72,15 +51,14 @@ export default function Home() {
         {sections.map((section) => (
           <div
             key={section.href}
-            className="flex h-full flex-col justify-between rounded-2xl border border-surface-200 bg-white p-6 shadow-sm transition hover:border-primary-300 hover:shadow-md dark:border-surface-700 dark:bg-surface-900"
+            className="flex h-full flex-col justify-between rounded-2xl border border-transparent bg-white/90 p-6 shadow-lg shadow-primary-100/60 transition hover:-translate-y-1 hover:shadow-xl dark:border-surface-700 dark:bg-surface-900"
           >
             <div className="space-y-3">
-              <h2 className="text-xl font-semibold">{t(section.titleKey)}</h2>
-              <p className="text-sm text-muted-foreground">{section.description}</p>
+              <h2 className="text-xl font-semibold text-primary-700 dark:text-primary-200">{t(section.titleKey)}</h2>
             </div>
             <Link
               href={section.href}
-              className="mt-6 inline-flex items-center justify-center rounded-full bg-primary-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-600"
+              className="mt-6 inline-flex items-center justify-center rounded-full bg-gradient-to-r from-primary-400 to-accent-200 px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:brightness-105"
             >
               {section.cta}
             </Link>

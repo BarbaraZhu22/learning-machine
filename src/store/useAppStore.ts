@@ -4,9 +4,11 @@ import { create } from 'zustand';
 import { devtools, persist, createJSONStorage } from 'zustand/middleware';
 import { defaultNoteTemplates } from '@/data/noteTemplates';
 import { defaultLearningLanguage } from '@/data/learningLanguages';
+import { colorThemeMap, defaultColorTheme } from '@/data/colorThemes';
 import {
   LanguageCode,
   LearningLanguageCode,
+  ColorThemeKey,
   NoteRecord,
   NoteTemplate,
   ThemeMode,
@@ -33,12 +35,14 @@ interface AppState {
   theme: ThemeMode;
   language: LanguageCode;
   learningLanguage: LearningLanguageCode;
+  colorTheme: ColorThemeKey;
   noteTemplates: NoteTemplate[];
   notes: NoteRecord[];
   vocabulary: VocabularyEntry[];
   setTheme: (theme: ThemeMode) => void;
   setLanguage: (language: LanguageCode) => void;
   setLearningLanguage: (language: LearningLanguageCode) => void;
+  setColorTheme: (theme: ColorThemeKey) => void;
   setNoteTemplates: (templates: NoteTemplate[]) => void;
   upsertTemplate: (template: NoteTemplate) => void;
   removeTemplate: (id: string) => void;
@@ -75,6 +79,7 @@ export const useAppStore = create<AppState>()(
         theme: 'system',
         language: 'en',
         learningLanguage: defaultLearningLanguage,
+        colorTheme: defaultColorTheme,
         noteTemplates: defaultNoteTemplates,
         notes: [],
         vocabulary: [],
@@ -84,6 +89,12 @@ export const useAppStore = create<AppState>()(
         setLanguage: (language) => set({ language }),
 
         setLearningLanguage: (learningLanguage) => set({ learningLanguage }),
+
+        setColorTheme: (colorTheme) => {
+          if (colorThemeMap[colorTheme]) {
+            set({ colorTheme });
+          }
+        },
 
         setNoteTemplates: (templates) => set({ noteTemplates: [...templates] }),
 
@@ -210,6 +221,7 @@ export const useAppStore = create<AppState>()(
           theme: state.theme,
           language: state.language,
           learningLanguage: state.learningLanguage,
+          colorTheme: state.colorTheme,
           noteTemplates: state.noteTemplates,
         }),
       },
@@ -220,6 +232,7 @@ export const useAppStore = create<AppState>()(
 export const selectTheme = (state: AppState) => state.theme;
 export const selectLanguage = (state: AppState) => state.language;
 export const selectLearningLanguage = (state: AppState) => state.learningLanguage;
+export const selectColorTheme = (state: AppState) => state.colorTheme;
 export const selectNoteTemplates = (state: AppState) => state.noteTemplates;
 export const selectNotes = (state: AppState) => state.notes;
 export const selectVocabulary = (state: AppState) => state.vocabulary;

@@ -1,0 +1,174 @@
+.heroShell {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+@media (min-width: 1024px) {
+  .heroShell {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    align-items: stretch;
+  }
+}
+
+.selectorColumn {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1.25rem;
+}
+
+.marqueeColumn {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 1.5rem;
+  overflow: hidden;
+}
+
+.marqueeCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.typewriterWrapper {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: rgba(30, 41, 59, 0.92);
+}
+
+:global(.dark) .typewriterWrapper {
+  color: rgba(226, 232, 240, 0.92);
+}
+
+.typewriter {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding-right: 0.25rem;
+  color: var(--primary-500);
+}
+
+.typewriter::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 1.2em;
+  background: currentColor;
+  animation: caret-blink 1s steps(2, start) infinite;
+}
+
+.marqueeViewport {
+  position: relative;
+  overflow: hidden;
+}
+
+.marqueeTrack {
+  display: flex;
+  gap: 0.75rem;
+  padding-block: 0.35rem 0.5rem;
+  min-width: max-content;
+  animation: language-marquee 22s linear infinite;
+}
+
+.marqueeColumn:hover .marqueeTrack {
+  animation-play-state: paused;
+}
+
+.marqueeShade {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3.25rem;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.marqueeShadeLeft {
+  left: 0;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.9),
+    rgba(255, 255, 255, 0)
+  );
+}
+
+.marqueeShadeRight {
+  right: 0;
+  background: linear-gradient(
+    270deg,
+    rgba(255, 255, 255, 0.9),
+    rgba(255, 255, 255, 0)
+  );
+}
+
+:global(.dark) .marqueeShadeLeft {
+  background: linear-gradient(
+    90deg,
+    rgba(15, 23, 42, 0.85),
+    rgba(15, 23, 42, 0)
+  );
+}
+
+:global(.dark) .marqueeShadeRight {
+  background: linear-gradient(
+    270deg,
+    rgba(15, 23, 42, 0.85),
+    rgba(15, 23, 42, 0)
+  );
+}
+
+.marqueePill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.4rem 0.85rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: rgba(30, 64, 175, 0.95);
+  background: rgba(237, 242, 255, 0.75);
+  border: 1px solid rgba(191, 219, 254, 0.6);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.12);
+  transition: transform 200ms ease, box-shadow 200ms ease;
+}
+
+.marqueePill:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 22px rgba(99, 102, 241, 0.25);
+}
+
+:global(.dark) .marqueePill {
+  color: rgba(224, 231, 255, 0.94);
+  background: rgba(30, 41, 59, 0.75);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  box-shadow: 0 6px 16px rgba(79, 70, 229, 0.2);
+}
+
+@keyframes language-marquee {
+  0% {
+    transform: translateX(0);
+  }
+
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes caret-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0;
+  }
+}
+

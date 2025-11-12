@@ -114,7 +114,7 @@ export const colorThemes: ThemePalette[] = [
       'surface-200': '#2f1951',
       'surface-300': '#3b1e66',
       'surface-600': '#7c3aed',
-      'surface-700': '#a855f7',
+      'surface-700': '#a5b4fc',
       'surface-800': '#c084fc',
       'surface-900': '#d8b4fe',
       'surface-950': '#f3e8ff',

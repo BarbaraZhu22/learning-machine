@@ -19,7 +19,7 @@ const sharedDestructive: Palette = {
 export const colorThemes: ThemePalette[] = [
   {
     key: 'blue',
-    label: 'Blue Sky',
+    label: 'Blue Lemon',
     light: {
       'surface-50': '#eaf4ff',
       'surface-100': '#d4e8ff',
@@ -39,10 +39,10 @@ export const colorThemes: ThemePalette[] = [
       'primary-700': '#0d3aa3',
       'primary-800': '#0a2c7d',
       'primary-900': '#071f58',
-      'accent-50': '#fff9db',
-      'accent-100': '#ffec99',
-      'accent-200': '#ffdc62',
-      'accent-500': '#ffc400',
+      'accent-50': '#e7efba',
+      'accent-100': '#dce79c',
+      'accent-200': '#d7e972',
+      'accent-500': '#d4eb4e',
       'muted-foreground': '#2f4f72',
       'text-primary': '#0a1b2f',
       'text-inverse': '#f8fbff',
@@ -259,7 +259,7 @@ export const colorThemes: ThemePalette[] = [
   },
 ];
 
-export const defaultColorTheme: ColorThemeKey = 'purple';
+export const defaultColorTheme: ColorThemeKey = 'blue';
 
 export const colorThemeMap = colorThemes.reduce<Record<ColorThemeKey, ThemePalette>>((acc, theme) => {
   acc[theme.key] = theme;

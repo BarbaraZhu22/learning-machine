@@ -90,7 +90,7 @@ export const NoteGenerator = ({ templates, onGenerate }: NoteGeneratorProps) => 
         <div className="flex flex-col gap-2">
           <label className="text-sm font-medium">{t('userInput')}</label>
           <textarea
-            className="min-h-[160px] rounded-md border border-primary-200 bg-white/90 px-3 py-2 text-sm shadow-inner transition focus:border-primary-400 focus:ring-2 focus:ring-primary-200 dark:border-surface-600 dark:bg-surface-900"
+            className="min-h-40 rounded-md border border-primary-200 bg-white/90 px-3 py-2 text-sm shadow-inner transition focus:border-primary-400 focus:ring-2 focus:ring-primary-200 dark:border-surface-600 dark:bg-surface-900"
             placeholder="Paste a short summary or raw vocabulary list..."
             value={userInput}
             onChange={(event) => setUserInput(event.target.value)}

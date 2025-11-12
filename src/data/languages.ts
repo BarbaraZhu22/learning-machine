@@ -47,6 +47,8 @@ export const translations: LanguageCatalog = {
     selectNode: "Select a node to expand the network.",
     vocabularyGame: "Vocabulary Game",
     rememberPrompt: "Remember all nodes this round?",
+    footerOwner: "ZHU YU TING",
+    footerRights: "All rights reserved.",
   },
   zh: {
     appTitle: "学习机",
@@ -90,6 +92,8 @@ export const translations: LanguageCatalog = {
     selectNode: "请选择一个节点来扩展网络。",
     vocabularyGame: "词汇游戏",
     rememberPrompt: "本轮要记住所有节点吗？",
+    footerOwner: "ZHU YU TING",
+    footerRights: "保留所有权利。",
   },
 };
 

@@ -85,7 +85,7 @@ export const NoteTemplateManager = ({ onTemplateSelect }: NoteTemplateManagerPro
   };
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
+    <div className="grid gap-6 lg:grid-cols-[minmax(16rem,20rem)_1fr]">
       <div className="space-y-4 rounded-lg border border-surface-300 bg-surface-100 p-4 dark:border-surface-700 dark:bg-surface-900">
         <h3 className="text-lg font-semibold">{t('noteTemplate')}</h3>
         <div className="space-y-2">
@@ -191,7 +191,7 @@ export const NoteTemplateManager = ({ onTemplateSelect }: NoteTemplateManagerPro
                     </button>
                   </div>
                   {section.tags.length ? (
-                    <div className="mt-2 flex flex-wrap gap-2 text-[10px] uppercase tracking-wide text-muted-foreground">
+                    <div className="mt-2 flex flex-wrap gap-2 text-[0.625rem] uppercase tracking-wide text-muted-foreground">
                       {section.tags.map((tag) => (
                         <span key={tag} className="rounded-md bg-surface-200 px-2 py-1 dark:bg-surface-800">
                           {tag}

@@ -34,7 +34,7 @@ export default function NotePage() {
 
   return (
     <div className="space-y-8">
-      <section className="space-y-4 rounded-xl border border-transparent bg-gradient-to-r from-primary-50 via-surface-50 to-accent-50 p-6 shadow-lg shadow-primary-100/60 dark:border-surface-700 dark:bg-surface-900">
+      <section className="space-y-4 rounded-xl border border-transparent bg-gradient-to-r from-primary-50 via-surface-50 to-primary-50 p-6 shadow-lg shadow-primary-100/60 dark:border-surface-700 dark:bg-surface-900">
         <div className="flex flex-col gap-2 md:flex-row md:items-baseline md:justify-between">
           <h1 className="text-3xl font-semibold text-primary-700 dark:text-primary-200">{t('notes')}</h1>
           <span className="text-sm text-primary-700/80 dark:text-primary-100/80">

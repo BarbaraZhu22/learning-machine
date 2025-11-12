@@ -50,7 +50,7 @@ export const NoteReader = ({ note, onChange, onSave, onCancel }: NoteReaderProps
         </label>
         <textarea
           id="note-content"
-          className="min-h-[240px] rounded-md border border-primary-200 bg-white/90 px-3 py-2 text-sm font-mono shadow-inner transition focus:border-primary-400 focus:ring-2 focus:ring-primary-200 dark:border-surface-600 dark:bg-surface-800"
+          className="min-h-60 rounded-md border border-primary-200 bg-white/90 px-3 py-2 text-sm font-mono shadow-inner transition focus:border-primary-400 focus:ring-2 focus:ring-primary-200 dark:border-surface-600 dark:bg-surface-800"
           value={note.content}
           onChange={(event) => onChange({ ...note, content: event.target.value })}
         />

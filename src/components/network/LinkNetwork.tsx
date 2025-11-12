@@ -166,7 +166,7 @@ export const LinkNetwork = () => {
           </div>
         </div>
 
-        <div className="relative h-[400px] w-full overflow-hidden rounded-md border border-surface-200 bg-surface-50 dark:border-surface-700 dark:bg-surface-950">
+        <div className="relative aspect-[4/3] min-h-72 w-full overflow-hidden rounded-md border border-surface-200 bg-surface-50 dark:border-surface-700 dark:bg-surface-950 lg:min-h-[24rem]">
           <svg viewBox={`0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`} className="h-full w-full">
             {edges.map((edge) => {
               const from = positions[edge.from];
@@ -179,7 +179,7 @@ export const LinkNetwork = () => {
                     y1={from.y}
                     x2={to.x}
                     y2={to.y}
-                    stroke="var(--edge-color, #888)"
+                    stroke="var(--edge-color, var(--muted-foreground))"
                     strokeWidth={1.5}
                     strokeDasharray={edge.type === 'antonym' ? '6 4' : undefined}
                   />
@@ -200,15 +200,15 @@ export const LinkNetwork = () => {
                 >
                   <circle
                     r={isSelected ? 28 : 22}
-                    fill={isSelected ? 'var(--primary-500, #3b82f6)' : 'var(--surface-200, #e5e7eb)'}
-                    stroke="var(--surface-900, #111827)"
+                    fill={isSelected ? 'var(--primary-500)' : 'var(--surface-200)'}
+                    stroke="var(--surface-900)"
                     strokeWidth={isSelected ? 3 : 1.5}
                   />
                   <text
                     textAnchor="middle"
                     alignmentBaseline="middle"
-                    fill={isSelected ? '#fff' : '#111827'}
-                    fontSize={isSelected ? 12 : 11}
+                    fill={isSelected ? 'var(--text-inverse)' : 'var(--text-primary)'}
+                    fontSize={isSelected ? '0.75rem' : '0.6875rem'}
                   >
                     {entry.word}
                   </text>

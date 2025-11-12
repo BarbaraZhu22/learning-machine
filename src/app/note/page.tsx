@@ -62,7 +62,7 @@ export default function NotePage() {
         </div>
       </section>
 
-      <section className="rounded-xl border border-transparent bg-white/90 p-6 shadow-lg shadow-primary-100/60 backdrop-blur dark:border-surface-700 dark:bg-surface-900">
+      <section className="rounded-xl border border-surface-200/50 bg-[color:var(--glass-base)] p-6 shadow-lg shadow-primary-100/60 backdrop-blur dark:border-surface-700 dark:bg-surface-900">
         <h2 className="text-2xl font-semibold text-primary-700 dark:text-primary-200">{t('noteReader')}</h2>
         <div className="mt-4">
           <NoteReader

@@ -155,7 +155,7 @@ export const LinkNetwork = () => {
 
   return (
     <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-      <div className="rounded-lg border border-transparent bg-white/90 p-4 shadow-lg shadow-primary-100/40 backdrop-blur dark:border-surface-700 dark:bg-surface-900">
+      <div className="rounded-lg border border-surface-200/50 bg-[color:var(--glass-base)] p-4 shadow-lg shadow-primary-100/40 backdrop-blur dark:border-surface-700 dark:bg-surface-900">
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-lg font-semibold text-primary-700 dark:text-primary-200">{t('linkNetwork')}</h3>
@@ -219,7 +219,7 @@ export const LinkNetwork = () => {
         </div>
       </div>
 
-      <div className="space-y-4 rounded-lg border border-transparent bg-white/90 p-4 text-sm shadow-lg shadow-primary-100/40 backdrop-blur dark:border-surface-700 dark:bg-surface-950">
+      <div className="space-y-4 rounded-lg border border-surface-200/50 bg-[color:var(--glass-base)] p-4 text-sm shadow-lg shadow-primary-100/40 backdrop-blur dark:border-surface-700 dark:bg-surface-950">
         <h4 className="text-base font-semibold">{t('vocabularyGame')}</h4>
 
         {selectedEntry ? (
@@ -240,8 +240,8 @@ export const LinkNetwork = () => {
                     key={type}
                     className={`rounded-full px-3 py-1 text-xs font-semibold shadow-sm transition ${
                       relationType === type
-                        ? 'bg-gradient-to-r from-primary-400 to-accent-200 text-white shadow-primary-200/60'
-                        : 'bg-white/80 text-primary-700 hover:bg-white dark:bg-surface-800 dark:text-surface-200'
+                        ? 'bg-gradient-to-r from-primary-400 to-accent-200 text-[color:var(--text-inverse)] shadow-primary-200/60'
+                        : 'bg-[color:var(--glass-base)] text-primary-700 hover:bg-[color:var(--glass-accent)] dark:bg-surface-800 dark:text-surface-200'
                     }`}
                     onClick={() => setRelationType(type)}
                   >
@@ -256,7 +256,7 @@ export const LinkNetwork = () => {
                 Connect to
               </label>
               <select
-                className="w-full rounded-md border border-surface-300 bg-white px-2 py-1 text-sm dark:border-surface-600 dark:bg-surface-900"
+                className="w-full rounded-md border border-surface-300 bg-surface-50 px-2 py-1 text-sm dark:border-surface-600 dark:bg-surface-900"
                 value={targetId}
                 onChange={(event) => setTargetId(event.target.value)}
               >
@@ -273,13 +273,13 @@ export const LinkNetwork = () => {
               {targetId === 'new' ? (
                 <div className="space-y-2">
                   <input
-                    className="w-full rounded-md border border-surface-300 bg-white px-2 py-1 text-sm dark:border-surface-600 dark:bg-surface-900"
+                    className="w-full rounded-md border border-surface-300 bg-surface-50 px-2 py-1 text-sm dark:border-surface-600 dark:bg-surface-900"
                     placeholder="New word"
                     value={newWord}
                     onChange={(event) => setNewWord(event.target.value)}
                   />
                   <input
-                    className="w-full rounded-md border border-surface-300 bg-white px-2 py-1 text-sm dark:border-surface-600 dark:bg-surface-900"
+                    className="w-full rounded-md border border-surface-300 bg-surface-50 px-2 py-1 text-sm dark:border-surface-600 dark:bg-surface-900"
                     placeholder="Meaning (optional)"
                     value={newMeaning}
                     onChange={(event) => setNewMeaning(event.target.value)}
@@ -289,7 +289,7 @@ export const LinkNetwork = () => {
             </div>
 
             <button
-              className="w-full rounded-full bg-gradient-to-r from-primary-400 to-accent-200 px-3 py-2 text-sm font-semibold text-white shadow-md transition hover:brightness-105"
+              className="w-full rounded-full bg-gradient-to-r from-primary-400 to-accent-200 px-3 py-2 text-sm font-semibold text-[color:var(--text-inverse)] shadow-md transition hover:brightness-105"
               onClick={handleAddRelation}
             >
               Add relation
@@ -304,7 +304,7 @@ export const LinkNetwork = () => {
                     return (
                       <li
                         key={relation.id}
-                        className="flex items-center justify-between rounded-md border border-transparent bg-white/90 px-3 py-2 shadow-sm shadow-primary-100/40 dark:border-surface-700 dark:bg-surface-900"
+                    className="flex items-center justify-between rounded-md border border-surface-200/40 bg-[color:var(--glass-base)] px-3 py-2 shadow-sm shadow-primary-100/40 dark:border-surface-700 dark:bg-surface-900"
                       >
                         <div>
                           <div className="font-medium">{target?.word ?? relation.targetId}</div>
@@ -333,7 +333,7 @@ export const LinkNetwork = () => {
           </div>
         )}
 
-        <div className="rounded-md border border-surface-200 bg-white p-3 text-xs dark:border-surface-700 dark:bg-surface-900">
+        <div className="rounded-md border border-surface-200 bg-surface-50 p-3 text-xs dark:border-surface-700 dark:bg-surface-900">
           <div className="font-semibold">{t('rememberPrompt')}</div>
           <p>Record the links after each session to reinforce memory of word families.</p>
         </div>

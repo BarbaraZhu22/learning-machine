@@ -69,7 +69,7 @@ export const DialogSimulator = () => {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-lg border border-transparent bg-white/85 p-4 shadow-lg shadow-primary-100/40 backdrop-blur dark:border-surface-700 dark:bg-surface-950">
+      <div className="rounded-lg border border-surface-200/50 bg-[color:var(--glass-base)] p-4 shadow-lg shadow-primary-100/40 backdrop-blur dark:border-surface-700 dark:bg-surface-950">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold text-primary-700 dark:text-primary-200">{t('simulateDialog')}</h3>
           <div className="text-xs text-primary-700/80 dark:text-primary-100/80">
@@ -78,12 +78,12 @@ export const DialogSimulator = () => {
         </div>
       </div>
 
-      <form className="space-y-4 rounded-lg border border-transparent bg-white/90 p-4 shadow-lg shadow-primary-100/40 backdrop-blur dark:border-surface-700 dark:bg-surface-900" onSubmit={handleSubmit}>
+      <form className="space-y-4 rounded-lg border border-surface-200/50 bg-[color:var(--glass-base)] p-4 shadow-lg shadow-primary-100/40 backdrop-blur dark:border-surface-700 dark:bg-surface-900" onSubmit={handleSubmit}>
         <div className="grid gap-4 md:grid-cols-2">
           <div className="flex flex-col gap-2">
             <label className="text-sm font-medium">{t('dialogScenario')}</label>
             <input
-              className="rounded-md border border-primary-200 bg-white/90 px-3 py-2 text-sm shadow-inner transition focus:border-primary-400 focus:ring-2 focus:ring-primary-200 dark:border-surface-600 dark:bg-surface-800"
+              className="rounded-md border border-primary-200 bg-surface-50 px-3 py-2 text-sm shadow-inner transition focus:border-primary-400 focus:ring-2 focus:ring-primary-200 dark:border-surface-600 dark:bg-surface-800"
               placeholder="Dinner with friends"
               value={situation}
               onChange={(event) => setSituation(event.target.value)}
@@ -92,7 +92,7 @@ export const DialogSimulator = () => {
           <div className="flex flex-col gap-2">
             <label className="text-sm font-medium">{t('notesLabel')}</label>
             <input
-              className="rounded-md border border-primary-200 bg-white/90 px-3 py-2 text-sm shadow-inner transition focus:border-primary-400 focus:ring-2 focus:ring-primary-200 dark:border-surface-600 dark:bg-surface-800"
+              className="rounded-md border border-primary-200 bg-surface-50 px-3 py-2 text-sm shadow-inner transition focus:border-primary-400 focus:ring-2 focus:ring-primary-200 dark:border-surface-600 dark:bg-surface-800"
               placeholder="Goals or reminders"
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
@@ -103,7 +103,7 @@ export const DialogSimulator = () => {
           <div className="flex flex-col gap-2">
             <label className="text-sm font-medium">{t('characterA')}</label>
             <input
-              className="rounded-md border border-primary-200 bg-white/90 px-3 py-2 text-sm shadow-inner transition focus:border-primary-400 focus:ring-2 focus:ring-primary-200 dark:border-surface-600 dark:bg-surface-800"
+              className="rounded-md border border-primary-200 bg-surface-50 px-3 py-2 text-sm shadow-inner transition focus:border-primary-400 focus:ring-2 focus:ring-primary-200 dark:border-surface-600 dark:bg-surface-800"
               placeholder="Character A"
               value={characterA}
               onChange={(event) => setCharacterA(event.target.value)}
@@ -112,7 +112,7 @@ export const DialogSimulator = () => {
           <div className="flex flex-col gap-2">
             <label className="text-sm font-medium">{t('characterB')}</label>
             <input
-              className="rounded-md border border-primary-200 bg-white/90 px-3 py-2 text-sm shadow-inner transition focus:border-primary-400 focus:ring-2 focus:ring-primary-200 dark:border-surface-600 dark:bg-surface-800"
+              className="rounded-md border border-primary-200 bg-surface-50 px-3 py-2 text-sm shadow-inner transition focus:border-primary-400 focus:ring-2 focus:ring-primary-200 dark:border-surface-600 dark:bg-surface-800"
               placeholder="Character B"
               value={characterB}
               onChange={(event) => setCharacterB(event.target.value)}
@@ -121,7 +121,7 @@ export const DialogSimulator = () => {
         </div>
         <button
           type="submit"
-          className="rounded-full bg-gradient-to-r from-primary-400 to-accent-200 px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-full bg-gradient-to-r from-primary-500 to-primary-700 px-4 py-2 text-sm font-semibold text-[color:var(--text-inverse)] shadow-md transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
           disabled={!isReady}
         >
           {t('generate')}
@@ -129,25 +129,25 @@ export const DialogSimulator = () => {
       </form>
 
       {dialog ? (
-        <div className="space-y-4 rounded-lg border border-transparent bg-white/90 p-4 shadow-lg shadow-primary-100/40 backdrop-blur dark:border-surface-700 dark:bg-surface-950">
+        <div className="space-y-4 rounded-lg border border-surface-200/50 bg-[color:var(--glass-base)] p-4 shadow-lg shadow-primary-100/40 backdrop-blur dark:border-surface-700 dark:bg-surface-950">
           <div className="flex items-center justify-between">
             <h4 className="text-base font-semibold text-primary-700 dark:text-primary-200">Transcript</h4>
             <button className="text-sm text-primary-500 hover:underline" onClick={handleSaveNote}>
               Save to notes
             </button>
           </div>
-          <pre className="whitespace-pre-wrap rounded-md border border-primary-100 bg-white/90 p-4 text-sm shadow-inner dark:border-surface-700 dark:bg-surface-900">
+          <pre className="whitespace-pre-wrap rounded-md border border-primary-100 bg-surface-50 p-4 text-sm shadow-inner dark:border-surface-700 dark:bg-surface-900">
             {dialog}
           </pre>
         </div>
       ) : null}
 
       {history.length ? (
-        <div className="space-y-3 rounded-lg border border-transparent bg-white/90 p-4 shadow-lg shadow-primary-100/40 backdrop-blur dark:border-surface-700 dark:bg-surface-900">
+        <div className="space-y-3 rounded-lg border border-surface-200/50 bg-[color:var(--glass-base)] p-4 shadow-lg shadow-primary-100/40 backdrop-blur dark:border-surface-700 dark:bg-surface-900">
           <h4 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">History</h4>
           <ul className="space-y-2 text-sm">
             {history.map((item) => (
-              <li key={item.id} className="rounded-md border border-transparent bg-white/90 p-3 shadow-sm shadow-primary-100/40 dark:border-surface-700 dark:bg-surface-950">
+              <li key={item.id} className="rounded-md border border-surface-200/40 bg-[color:var(--glass-base)] p-3 shadow-sm shadow-primary-100/40 dark:border-surface-700 dark:bg-surface-950">
                 <div className="font-semibold">{item.situation}</div>
                 <div className="text-xs text-muted-foreground">
                   {item.characterA} & {item.characterB} · {new Date(item.createdAt).toLocaleString()}

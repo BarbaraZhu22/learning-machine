@@ -28,7 +28,7 @@ export default function Home() {
           </p>
         </div>
 
-        <div className="mt-10 max-w-md rounded-2xl border border-accent-200/60 bg-white/85 p-4 shadow-md shadow-accent-100/30 backdrop-blur dark:border-accent-200/40 dark:bg-surface-900/80">
+        <div className="mt-10 max-w-md rounded-2xl border border-accent-200/60 bg-[color:var(--glass-base)] p-4 shadow-md shadow-accent-100/30 backdrop-blur dark:border-accent-200/40 dark:bg-surface-900/80">
           <label className="flex flex-col gap-2 text-sm font-medium text-primary-800 dark:text-primary-100">
             <span>{t("learningLanguage")}</span>
             <span className="text-xs font-normal text-muted-foreground">
@@ -64,7 +64,7 @@ export default function Home() {
             </div>
             <Link
               href={section.href}
-              className="mt-6 inline-flex items-center justify-center rounded-full border border-transparent bg-gradient-to-r from-primary-500 via-accent-400 to-primary-700 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-primary-200/40 transition hover:scale-[1.02] hover:shadow-primary-200/60"
+              className="mt-6 inline-flex items-center justify-center rounded-full border border-transparent bg-gradient-to-r from-primary-500 via-accent-400 to-primary-700 px-4 py-2 text-sm font-semibold text-[color:var(--text-inverse)] shadow-md shadow-primary-200/40 transition hover:scale-[1.02] hover:shadow-primary-200/60"
             >
               {section.cta}
             </Link>

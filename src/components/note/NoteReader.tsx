@@ -31,14 +31,14 @@ export const NoteReader = ({ note, onChange, onSave, onCancel }: NoteReaderProps
   };
 
   return (
-    <div className="space-y-4 rounded-lg border border-transparent bg-white/90 p-4 shadow-lg shadow-primary-100/40 backdrop-blur dark:border-surface-700 dark:bg-surface-900">
+    <div className="space-y-4 rounded-lg border border-surface-200/50 bg-[color:var(--glass-base)] p-4 shadow-lg shadow-primary-100/40 backdrop-blur dark:border-surface-700 dark:bg-surface-900">
       <div className="flex flex-col gap-2">
         <label className="text-sm font-medium" htmlFor="note-title">
           Title
         </label>
         <input
           id="note-title"
-          className="rounded-md border border-primary-200 bg-white/90 px-3 py-2 text-sm shadow-inner transition focus:border-primary-400 focus:ring-2 focus:ring-primary-200 dark:border-surface-600 dark:bg-surface-800"
+          className="rounded-md border border-primary-200 bg-surface-50 px-3 py-2 text-sm shadow-inner transition focus:border-primary-400 focus:ring-2 focus:ring-primary-200 dark:border-surface-600 dark:bg-surface-800"
           value={note.title}
           onChange={(event) => onChange({ ...note, title: event.target.value })}
         />
@@ -50,7 +50,7 @@ export const NoteReader = ({ note, onChange, onSave, onCancel }: NoteReaderProps
         </label>
         <textarea
           id="note-content"
-          className="min-h-60 rounded-md border border-primary-200 bg-white/90 px-3 py-2 text-sm font-mono shadow-inner transition focus:border-primary-400 focus:ring-2 focus:ring-primary-200 dark:border-surface-600 dark:bg-surface-800"
+          className="min-h-60 rounded-md border border-primary-200 bg-surface-50 px-3 py-2 text-sm font-mono shadow-inner transition focus:border-primary-400 focus:ring-2 focus:ring-primary-200 dark:border-surface-600 dark:bg-surface-800"
           value={note.content}
           onChange={(event) => onChange({ ...note, content: event.target.value })}
         />
@@ -58,7 +58,7 @@ export const NoteReader = ({ note, onChange, onSave, onCancel }: NoteReaderProps
 
       <div className="flex flex-wrap items-center gap-3">
         <button
-          className="rounded-full bg-gradient-to-r from-primary-400 to-accent-200 px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:brightness-105"
+          className="rounded-full bg-gradient-to-r from-primary-400 to-accent-200 px-4 py-2 text-sm font-semibold text-[color:var(--text-inverse)] shadow-md transition hover:brightness-105"
           onClick={handleSave}
         >
           {t("save")}

@@ -43,7 +43,7 @@ export const MergeNotes = ({ templates, notes, onMerge }: MergeNotesProps) => {
   };
 
   return (
-    <form className="space-y-4 rounded-lg border border-transparent bg-white/85 p-4 shadow-lg shadow-primary-100/40 backdrop-blur dark:border-surface-700 dark:bg-surface-950" onSubmit={handleSubmit}>
+    <form className="space-y-4 rounded-lg border border-surface-200/50 bg-[color:var(--glass-base)] p-4 shadow-lg shadow-primary-100/40 backdrop-blur dark:border-surface-700 dark:bg-surface-950" onSubmit={handleSubmit}>
       <div className="flex flex-col gap-2">
         <h3 className="text-lg font-semibold text-primary-700 dark:text-primary-200">{t('merge')}</h3>
         <p className="text-sm text-primary-700/80 dark:text-primary-100/80">
@@ -55,7 +55,7 @@ export const MergeNotes = ({ templates, notes, onMerge }: MergeNotesProps) => {
         <div className="flex flex-col gap-2">
           <label className="text-sm font-medium">{t('selectTemplate')}</label>
           <select
-            className="rounded-md border border-primary-200 bg-white/90 px-3 py-2 text-sm shadow-inner transition focus:border-primary-400 focus:ring-2 focus:ring-primary-200 dark:border-surface-600 dark:bg-surface-900"
+            className="rounded-md border border-primary-200 bg-surface-50 px-3 py-2 text-sm shadow-inner transition focus:border-primary-400 focus:ring-2 focus:ring-primary-200 dark:border-surface-600 dark:bg-surface-900"
             value={templateId}
             onChange={(event) => {
               setTemplateId(event.target.value);
@@ -74,7 +74,7 @@ export const MergeNotes = ({ templates, notes, onMerge }: MergeNotesProps) => {
         <div className="flex flex-col gap-2">
           <label className="text-sm font-medium">{t('noteGenerator')}</label>
           <input
-            className="rounded-md border border-primary-200 bg-white/90 px-3 py-2 text-sm shadow-inner transition focus:border-primary-400 focus:ring-2 focus:ring-primary-200 dark:border-surface-600 dark:bg-surface-900"
+            className="rounded-md border border-primary-200 bg-surface-50 px-3 py-2 text-sm shadow-inner transition focus:border-primary-400 focus:ring-2 focus:ring-primary-200 dark:border-surface-600 dark:bg-surface-900"
             placeholder="Merged note title"
             value={title}
             onChange={(event) => setTitle(event.target.value)}
@@ -88,7 +88,7 @@ export const MergeNotes = ({ templates, notes, onMerge }: MergeNotesProps) => {
           {filteredNotes.map((note) => (
             <label
               key={note.id}
-              className="flex cursor-pointer items-center justify-between rounded-md border border-transparent bg-white/90 px-3 py-2 text-sm shadow-sm shadow-primary-100/40 transition hover:-translate-y-0.5 dark:border-surface-700 dark:bg-surface-900"
+              className="flex cursor-pointer items-center justify-between rounded-md border border-surface-200/40 bg-[color:var(--glass-base)] px-3 py-2 text-sm shadow-sm shadow-primary-100/40 transition hover:-translate-y-0.5 dark:border-surface-700 dark:bg-surface-900"
             >
               <div>
                 <div className="font-medium">{note.title}</div>
@@ -107,7 +107,7 @@ export const MergeNotes = ({ templates, notes, onMerge }: MergeNotesProps) => {
 
       <button
         type="submit"
-        className="rounded-full bg-gradient-to-r from-primary-400 to-accent-200 px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
+        className="rounded-full bg-gradient-to-r from-primary-400 to-accent-200 px-4 py-2 text-sm font-semibold text-[color:var(--text-inverse)] shadow-md transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
         disabled={!selectedNoteIds.length || !title.trim()}
       >
         {t('mergeSelected')}

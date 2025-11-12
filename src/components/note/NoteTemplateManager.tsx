@@ -110,13 +110,13 @@ export const NoteTemplateManager = ({ onTemplateSelect }: NoteTemplateManagerPro
         <form className="space-y-2 border-t border-dashed border-surface-300 pt-4 text-sm dark:border-surface-700" onSubmit={handleCreateTemplate}>
           <div className="font-semibold">{t('templateEditor')}</div>
           <input
-            className="w-full rounded-md border border-surface-300 bg-white px-2 py-1 dark:border-surface-600 dark:bg-surface-800"
+            className="w-full rounded-md border border-surface-300 bg-surface-50 px-2 py-1 dark:border-surface-600 dark:bg-surface-800"
             placeholder="Template name"
             value={newTemplateName}
             onChange={(event) => setNewTemplateName(event.target.value)}
           />
           <textarea
-            className="w-full rounded-md border border-surface-300 bg-white px-2 py-1 dark:border-surface-600 dark:bg-surface-800"
+            className="w-full rounded-md border border-surface-300 bg-surface-50 px-2 py-1 dark:border-surface-600 dark:bg-surface-800"
             placeholder="Template description"
             rows={2}
             value={newTemplateDescription}
@@ -124,7 +124,7 @@ export const NoteTemplateManager = ({ onTemplateSelect }: NoteTemplateManagerPro
           />
           <button
             type="submit"
-            className="w-full rounded-md bg-primary-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-primary-600"
+            className="w-full rounded-md bg-primary-500 px-3 py-2 text-sm font-semibold text-[color:var(--text-inverse)] transition hover:bg-primary-600"
           >
             {t('add')}
           </button>
@@ -169,7 +169,7 @@ export const NoteTemplateManager = ({ onTemplateSelect }: NoteTemplateManagerPro
 
             <div className="space-y-4">
               {selectedTemplate.sections.map((section) => (
-                <div key={section.id} className="rounded-md border border-surface-200 bg-white p-3 text-sm dark:border-surface-700 dark:bg-surface-900">
+                <div key={section.id} className="rounded-md border border-surface-200 bg-surface-50 p-3 text-sm dark:border-surface-700 dark:bg-surface-900">
                   <div className="flex items-start justify-between">
                     <div>
                       <div className="font-semibold">{section.title}</div>
@@ -206,27 +206,27 @@ export const NoteTemplateManager = ({ onTemplateSelect }: NoteTemplateManagerPro
             <form className="space-y-3 rounded-md border border-dashed border-surface-300 p-3 text-sm dark:border-surface-700" onSubmit={handleAddSection}>
               <div className="font-semibold">{t('addSection')}</div>
               <input
-                className="w-full rounded-md border border-surface-300 bg-white px-2 py-1 dark:border-surface-600 dark:bg-surface-800"
+                className="w-full rounded-md border border-surface-300 bg-surface-50 px-2 py-1 dark:border-surface-600 dark:bg-surface-800"
                 placeholder={t('sectionTitle')}
                 value={sectionTitle}
                 onChange={(event) => setSectionTitle(event.target.value)}
               />
               <textarea
-                className="w-full rounded-md border border-surface-300 bg-white px-2 py-1 dark:border-surface-600 dark:bg-surface-800"
+                className="w-full rounded-md border border-surface-300 bg-surface-50 px-2 py-1 dark:border-surface-600 dark:bg-surface-800"
                 placeholder={t('sectionDescription')}
                 rows={2}
                 value={sectionDescription}
                 onChange={(event) => setSectionDescription(event.target.value)}
               />
               <input
-                className="w-full rounded-md border border-surface-300 bg-white px-2 py-1 dark:border-surface-600 dark:bg-surface-800"
+                className="w-full rounded-md border border-surface-300 bg-surface-50 px-2 py-1 dark:border-surface-600 dark:bg-surface-800"
                 placeholder={`${t('tags')} (comma separated)`}
                 value={sectionTags}
                 onChange={(event) => setSectionTags(event.target.value)}
               />
               <button
                 type="submit"
-                className="w-full rounded-md bg-primary-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-primary-600"
+                className="w-full rounded-md bg-primary-500 px-3 py-2 text-sm font-semibold text-[color:var(--text-inverse)] transition hover:bg-primary-600"
               >
                 {t('addSection')}
               </button>

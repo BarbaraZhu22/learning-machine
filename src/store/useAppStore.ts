@@ -1,10 +1,15 @@
-'use client';
+"use client";
 
-import { create } from 'zustand';
-import { devtools, persist, createJSONStorage } from 'zustand/middleware';
-import { defaultNoteTemplates } from '@/data/noteTemplates';
-import { defaultLearningLanguage } from '@/data/learningLanguages';
-import { colorThemeMap, defaultColorTheme } from '@/data/colorThemes';
+import { create } from "zustand";
+import {
+  devtools,
+  persist,
+  createJSONStorage,
+  type StateStorage,
+} from "zustand/middleware";
+import { defaultNoteTemplates } from "@/data/noteTemplates";
+import { defaultLearningLanguage } from "@/data/learningLanguages";
+import { colorThemeMap, defaultColorTheme } from "@/data/colorThemes";
 import {
   LanguageCode,
   LearningLanguageCode,
@@ -14,8 +19,8 @@ import {
   ThemeMode,
   VocabularyEntry,
   VocabularyRelation,
-} from '@/types';
-import { indexedDbClient } from '@/lib/indexedDb';
+} from "@/types";
+import { indexedDbClient } from "@/lib/indexedDb";
 
 type NoteDraft = {
   title: string;
@@ -48,16 +53,22 @@ interface AppState {
   removeTemplate: (id: string) => void;
   setNotes: (notes: NoteRecord[]) => void;
   addNote: (draft: NoteDraft) => Promise<NoteRecord>;
-  updateNote: (id: string, changes: Partial<NoteDraft>) => Promise<NoteRecord | null>;
+  updateNote: (
+    id: string,
+    changes: Partial<NoteDraft>
+  ) => Promise<NoteRecord | null>;
   removeNote: (id: string) => Promise<void>;
   setVocabulary: (entries: VocabularyEntry[]) => void;
   addVocabulary: (draft: VocabularyDraft) => Promise<VocabularyEntry>;
-  updateVocabulary: (id: string, changes: Partial<VocabularyDraft>) => Promise<VocabularyEntry | null>;
+  updateVocabulary: (
+    id: string,
+    changes: Partial<VocabularyDraft>
+  ) => Promise<VocabularyEntry | null>;
   removeVocabulary: (id: string) => Promise<void>;
 }
 
 const createId = () => {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return crypto.randomUUID();
   }
   return Math.random().toString(36).slice(2);
@@ -65,19 +76,22 @@ const createId = () => {
 
 const now = () => new Date().toISOString();
 
-const settingsStorage = createJSONStorage(() => {
-  if (typeof window === 'undefined') {
-    return undefined;
-  }
-  return window.localStorage;
-});
+const noopStorage: StateStorage = {
+  getItem: () => null,
+  setItem: () => undefined,
+  removeItem: () => undefined,
+};
+
+const settingsStorage = createJSONStorage(() =>
+  typeof window === "undefined" ? noopStorage : window.localStorage
+);
 
 export const useAppStore = create<AppState>()(
   devtools(
     persist(
       (set, get) => ({
-        theme: 'system',
-        language: 'en',
+        theme: "system",
+        language: "zh",
         learningLanguage: defaultLearningLanguage,
         colorTheme: defaultColorTheme,
         noteTemplates: defaultNoteTemplates,
@@ -100,7 +114,9 @@ export const useAppStore = create<AppState>()(
 
         upsertTemplate: (template) =>
           set((state) => {
-            const index = state.noteTemplates.findIndex((item) => item.id === template.id);
+            const index = state.noteTemplates.findIndex(
+              (item) => item.id === template.id
+            );
             if (index === -1) {
               return { noteTemplates: [template, ...state.noteTemplates] };
             }
@@ -111,7 +127,9 @@ export const useAppStore = create<AppState>()(
 
         removeTemplate: (id) =>
           set((state) => ({
-            noteTemplates: state.noteTemplates.filter((template) => template.id !== id),
+            noteTemplates: state.noteTemplates.filter(
+              (template) => template.id !== id
+            ),
           })),
 
         setNotes: (notes) => set({ notes: [...notes] }),
@@ -172,7 +190,8 @@ export const useAppStore = create<AppState>()(
             meaning: draft.meaning,
             notes: draft.notes,
             tags: draft.tags ?? [],
-            relations: draft.relations?.map((relation) => ({ ...relation })) ?? [],
+            relations:
+              draft.relations?.map((relation) => ({ ...relation })) ?? [],
             createdAt: now(),
             updatedAt: now(),
           };
@@ -184,7 +203,9 @@ export const useAppStore = create<AppState>()(
         updateVocabulary: async (id, changes) => {
           let updated: VocabularyEntry | null = null;
           set((state) => {
-            const index = state.vocabulary.findIndex((entry) => entry.id === id);
+            const index = state.vocabulary.findIndex(
+              (entry) => entry.id === id
+            );
             if (index === -1) {
               return state;
             }
@@ -192,7 +213,9 @@ export const useAppStore = create<AppState>()(
             updated = {
               ...nextVocabulary[index],
               ...changes,
-              tags: changes.tags ? [...changes.tags] : nextVocabulary[index].tags,
+              tags: changes.tags
+                ? [...changes.tags]
+                : nextVocabulary[index].tags,
               relations: changes.relations
                 ? changes.relations.map((relation) => ({ ...relation }))
                 : nextVocabulary[index].relations,
@@ -215,7 +238,7 @@ export const useAppStore = create<AppState>()(
         },
       }),
       {
-        name: 'learning-machine-settings',
+        name: "learning-machine-settings",
         storage: settingsStorage,
         partialize: (state) => ({
           theme: state.theme,
@@ -224,16 +247,16 @@ export const useAppStore = create<AppState>()(
           colorTheme: state.colorTheme,
           noteTemplates: state.noteTemplates,
         }),
-      },
-    ),
-  ),
+      }
+    )
+  )
 );
 
 export const selectTheme = (state: AppState) => state.theme;
 export const selectLanguage = (state: AppState) => state.language;
-export const selectLearningLanguage = (state: AppState) => state.learningLanguage;
+export const selectLearningLanguage = (state: AppState) =>
+  state.learningLanguage;
 export const selectColorTheme = (state: AppState) => state.colorTheme;
 export const selectNoteTemplates = (state: AppState) => state.noteTemplates;
 export const selectNotes = (state: AppState) => state.notes;
 export const selectVocabulary = (state: AppState) => state.vocabulary;
-

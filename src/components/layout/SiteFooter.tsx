@@ -7,7 +7,7 @@ export const SiteFooter = () => {
   const currentYear = new Date().getFullYear();
 
   return (
-    <footer className="border-t border-white/30 px-6 py-4 text-center text-sm text-muted-foreground shadow-lg shadow-accent-100/10 backdrop-blur supports-[backdrop-filter]:bg-white/40 dark:border-surface-700/60 dark:bg-surface-900/60 dark:text-primary-100/80">
+    <footer className="border-t border-surface-200/50 bg-[color:var(--glass-base)] px-6 py-4 text-center text-sm text-muted-foreground shadow-lg shadow-accent-100/10 backdrop-blur supports-[backdrop-filter]:bg-[color:var(--glass-accent)] dark:border-surface-700/60 dark:bg-surface-900/60 dark:text-primary-100/80">
       <span>
         © {currentYear} {t("footerOwner")}
       </span>

@@ -32,14 +32,14 @@ export const SiteHeader = () => {
               <Link
                 key={item.href}
                 href={item.href}
-                className="rounded-full border border-white/40 bg-white/65 px-3 py-1 font-medium text-primary-700 shadow-sm transition hover:-translate-y-0.5 hover:border-accent-200/60 hover:bg-white/85 hover:text-primary-900 dark:border-white/10 dark:bg-surface-800/65 dark:text-primary-200 dark:hover:border-accent-200/40 dark:hover:bg-surface-800/80 dark:hover:text-primary-100"
+                className="rounded-full border border-surface-200/60 bg-[color:var(--glass-base)] px-3 py-1 font-medium text-primary-700 shadow-sm transition hover:-translate-y-0.5 hover:border-surface-300/60 hover:bg-[color:var(--glass-accent)] hover:text-primary-900 dark:border-surface-700/60 dark:bg-surface-800/65 dark:text-primary-200 dark:hover:border-surface-600/60 dark:hover:bg-surface-800/80 dark:hover:text-primary-100"
               >
                 {t(item.labelKey)}
               </Link>
             ))}
           </nav>
         </div>
-        <div className="group absolute right-3 top-4 z-30 flex scale-65  origin-top-right flex-row-reverse items-center justify-end gap-1 rounded-full border border-white/35 bg-white/80 px-2 py-1 text-[0.68rem] shadow-sm backdrop-blur-md transition-all duration-200 dark:border-white/15 dark:bg-surface-900/75 md:static md:ml-auto md:scale-100 md:flex-row md:gap-2 md:px-3 md:py-2 md:text-sm">
+        <div className="group absolute right-3 top-4 z-30 flex scale-65  origin-top-right flex-row-reverse items-center justify-end gap-1 rounded-full border border-surface-200/60 bg-[color:var(--glass-base)] px-2 py-1 text-[0.68rem] shadow-sm backdrop-blur-md transition-all duration-200 dark:border-surface-700/60 dark:bg-surface-900/75 md:static md:ml-auto md:scale-100 md:flex-row md:gap-2 md:px-3 md:py-2 md:text-sm">
           <LanguageSwitcher />
           <div className="hidden flex-row-reverse items-center justify-end gap-1 group-focus-within:flex group-hover:flex md:flex md:flex-row md:justify-end md:gap-2">
             <ThemeSwitcher />

@@ -105,7 +105,7 @@ export const VocabularyDashboard = () => {
         <div className="flex flex-col gap-2">
           <label className="text-sm font-medium">{t('addVocabulary')}</label>
           <input
-            className="rounded-md border border-surface-300 bg-white px-3 py-2 text-sm dark:border-surface-600 dark:bg-surface-900"
+            className="rounded-md border border-surface-300 bg-surface-50 px-3 py-2 text-sm dark:border-surface-600 dark:bg-surface-900"
             placeholder="Vocabulary"
             value={word}
             onChange={(event) => setWord(event.target.value)}
@@ -114,7 +114,7 @@ export const VocabularyDashboard = () => {
         <div className="flex flex-col gap-2">
           <label className="text-sm font-medium">Meaning</label>
           <input
-            className="rounded-md border border-surface-300 bg-white px-3 py-2 text-sm dark:border-surface-600 dark:bg-surface-900"
+            className="rounded-md border border-surface-300 bg-surface-50 px-3 py-2 text-sm dark:border-surface-600 dark:bg-surface-900"
             placeholder="Meaning"
             value={meaning}
             onChange={(event) => setMeaning(event.target.value)}
@@ -123,7 +123,7 @@ export const VocabularyDashboard = () => {
         <div className="flex flex-col gap-2">
           <label className="text-sm font-medium">{t('notesLabel')}</label>
           <textarea
-            className="rounded-md border border-surface-300 bg-white px-3 py-2 text-sm dark:border-surface-600 dark:bg-surface-900"
+            className="rounded-md border border-surface-300 bg-surface-50 px-3 py-2 text-sm dark:border-surface-600 dark:bg-surface-900"
             placeholder="Usage notes"
             rows={2}
             value={notes}
@@ -133,7 +133,7 @@ export const VocabularyDashboard = () => {
         <div className="flex flex-col gap-2">
           <label className="text-sm font-medium">{t('tags')}</label>
           <input
-            className="rounded-md border border-surface-300 bg-white px-3 py-2 text-sm dark:border-surface-600 dark:bg-surface-900"
+            className="rounded-md border border-surface-300 bg-surface-50 px-3 py-2 text-sm dark:border-surface-600 dark:bg-surface-900"
             placeholder="comma,separated,tags"
             value={tags}
             onChange={(event) => setTags(event.target.value)}
@@ -141,13 +141,13 @@ export const VocabularyDashboard = () => {
         </div>
         <button
           type="submit"
-          className="md:col-span-2 rounded-md bg-primary-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-600"
+          className="md:col-span-2 rounded-md bg-primary-500 px-4 py-2 text-sm font-semibold text-[color:var(--text-inverse)] transition hover:bg-primary-600"
         >
           {t('add')}
         </button>
       </form>
 
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-transparent bg-white/90 p-4 shadow-lg shadow-primary-100/40 backdrop-blur dark:border-surface-700 dark:bg-surface-900">
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-surface-200/50 bg-[color:var(--glass-base)] p-4 shadow-lg shadow-primary-100/40 backdrop-blur dark:border-surface-700 dark:bg-surface-900">
         <div>
           <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t('totalVocabulary')}</div>
           <div className="text-2xl font-bold">{vocabulary.length}</div>
@@ -156,7 +156,7 @@ export const VocabularyDashboard = () => {
           </div>
         </div>
         <input
-          className="max-w-xs flex-1 rounded-md border border-surface-300 bg-white px-3 py-2 text-sm dark:border-surface-600 dark:bg-surface-800"
+          className="max-w-xs flex-1 rounded-md border border-surface-300 bg-surface-50 px-3 py-2 text-sm dark:border-surface-600 dark:bg-surface-800"
           placeholder="Filter..."
           value={filter}
           onChange={(event) => setFilter(event.target.value)}
@@ -167,7 +167,7 @@ export const VocabularyDashboard = () => {
         {filteredVocabulary.map((entry) => (
           <div
             key={entry.id}
-            className="rounded-lg border border-transparent bg-white/90 p-4 text-sm shadow-lg shadow-primary-100/40 transition hover:-translate-y-0.5 dark:border-surface-700 dark:bg-surface-900"
+            className="rounded-lg border border-surface-200/50 bg-[color:var(--glass-base)] p-4 text-sm shadow-lg shadow-primary-100/40 transition hover:-translate-y-0.5 dark:border-surface-700 dark:bg-surface-900"
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
@@ -216,29 +216,29 @@ export const VocabularyDashboard = () => {
             </button>
           </div>
           <input
-            className="w-full rounded-md border border-surface-300 bg-white px-3 py-2 text-sm dark:border-surface-600 dark:bg-surface-900"
+            className="w-full rounded-md border border-surface-300 bg-surface-50 px-3 py-2 text-sm dark:border-surface-600 dark:bg-surface-900"
             value={editing.word}
             onChange={(event) => setEditing({ ...editing, word: event.target.value })}
           />
           <input
-            className="w-full rounded-md border border-surface-300 bg-white px-3 py-2 text-sm dark:border-surface-600 dark:bg-surface-900"
+            className="w-full rounded-md border border-surface-300 bg-surface-50 px-3 py-2 text-sm dark:border-surface-600 dark:bg-surface-900"
             value={editing.meaning}
             onChange={(event) => setEditing({ ...editing, meaning: event.target.value })}
           />
           <textarea
-            className="w-full rounded-md border border-surface-300 bg-white px-3 py-2 text-sm dark:border-surface-600 dark:bg-surface-900"
+            className="w-full rounded-md border border-surface-300 bg-surface-50 px-3 py-2 text-sm dark:border-surface-600 dark:bg-surface-900"
             rows={2}
             value={editing.notes}
             onChange={(event) => setEditing({ ...editing, notes: event.target.value })}
           />
           <input
-            className="w-full rounded-md border border-surface-300 bg-white px-3 py-2 text-sm dark:border-surface-600 dark:bg-surface-900"
+            className="w-full rounded-md border border-surface-300 bg-surface-50 px-3 py-2 text-sm dark:border-surface-600 dark:bg-surface-900"
             value={editing.tags}
             onChange={(event) => setEditing({ ...editing, tags: event.target.value })}
           />
           <button
             type="submit"
-            className="w-full rounded-md bg-primary-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-600"
+            className="w-full rounded-md bg-primary-500 px-4 py-2 text-sm font-semibold text-[color:var(--text-inverse)] transition hover:bg-primary-600"
           >
             {t('save')}
           </button>

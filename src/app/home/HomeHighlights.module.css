@@ -3,6 +3,12 @@
   gap: 1.5rem;
 }
 
+@media (min-width: 768px) {
+  .card {
+    padding-bottom: 2.5rem;
+  }
+}
+
 .card {
   display: flex;
   flex-direction: column;

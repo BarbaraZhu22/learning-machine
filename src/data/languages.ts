@@ -7,7 +7,8 @@ type LanguageCatalog = Record<LanguageCode, TranslationDictionary>;
 export const translations: LanguageCatalog = {
   en: {
     appTitle: "Learning Machine",
-    home: "home",
+    home: "Home",
+    colors: "Colors",
     theme: "Theme",
     language: "Language",
     learningLanguage: "Learning Language",
@@ -59,6 +60,7 @@ export const translations: LanguageCatalog = {
     appTitle: "学习机",
     home: "首页",
     theme: "主题",
+    colors: "颜色",
     language: "语言",
     learningLanguage: "学习语言",
     chooseLearningLanguage: "选择正在学习的语言",

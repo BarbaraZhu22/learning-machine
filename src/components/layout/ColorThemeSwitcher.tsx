@@ -1,11 +1,13 @@
-'use client';
+"use client";
 
-import { ChangeEvent } from 'react';
-import { colorThemes } from '@/data/colorThemes';
-import { useAppStore, selectColorTheme } from '@/store/useAppStore';
-import { ColorThemeKey } from '@/types';
+import { ChangeEvent } from "react";
+import { colorThemes } from "@/data/colorThemes";
+import { useAppStore, selectColorTheme } from "@/store/useAppStore";
+import { ColorThemeKey } from "@/types";
+import { useTranslation } from "@/hooks/useTranslation";
 
 export const ColorThemeSwitcher = () => {
+  const { t } = useTranslation();
   const colorTheme = useAppStore(selectColorTheme);
   const setColorTheme = useAppStore((state) => state.setColorTheme);
 
@@ -14,8 +16,8 @@ export const ColorThemeSwitcher = () => {
   };
 
   return (
-  <label className="flex items-center gap-2 rounded-full bg-[color:var(--glass-base)] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary-700 shadow-sm backdrop-blur dark:bg-surface-800/70 dark:text-primary-200">
-      <span>Colors</span>
+    <label className="flex items-center gap-2 rounded-full bg-[color:var(--glass-base)] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary-700 shadow-sm backdrop-blur dark:bg-surface-800/70 dark:text-primary-200">
+      <span>{t("colors")}</span>
       <select
         className="rounded-full border border-primary-200 bg-transparent px-2 py-1 text-xs font-medium text-primary-700 outline-none transition focus:border-primary-400 dark:border-surface-600 dark:text-primary-200"
         value={colorTheme}
@@ -30,4 +32,3 @@ export const ColorThemeSwitcher = () => {
     </label>
   );
 };
-

@@ -251,7 +251,15 @@ export const useAppStore = create<AppState>()(
           language: state.language,
           learningLanguage: state.learningLanguage,
           colorTheme: state.colorTheme,
-          aiConfig: state.aiConfig,
+          // Exclude apiKey from persistence - it's stored in HTTP-only cookie
+          aiConfig: state.aiConfig
+            ? {
+                provider: state.aiConfig.provider,
+                apiKey: '', // Never persist API key
+                apiUrl: state.aiConfig.apiUrl,
+                model: state.aiConfig.model,
+              }
+            : null,
           noteTemplates: state.noteTemplates,
         }),
       }

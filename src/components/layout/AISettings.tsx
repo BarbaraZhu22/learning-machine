@@ -20,6 +20,13 @@ const defaultModels: Record<LLMProvider, string> = {
   custom: "",
 };
 
+const providerTokenLinks: Record<LLMProvider, string> = {
+  deepseek: "https://platform.deepseek.com/api_keys",
+  openai: "https://platform.openai.com/api-keys",
+  anthropic: "https://console.anthropic.com/settings/keys",
+  custom: "",
+};
+
 export const AISettings = () => {
   const { t } = useTranslation();
   const aiConfig = useAppStore((state) => state.aiConfig);
@@ -35,13 +42,14 @@ export const AISettings = () => {
   const [model, setModel] = useState(
     aiConfig?.model || defaultModels[provider]
   );
+  const [expirationDays, setExpirationDays] = useState(30);
 
   // Ensure component is mounted before using portal
   useEffect(() => {
     isMountedRef.current = true;
   }, []);
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
 
     if (!apiKey.trim() && provider !== "custom") {
@@ -49,22 +57,64 @@ export const AISettings = () => {
       return;
     }
 
-    setAIConfig({
-      provider,
-      apiKey: apiKey.trim(),
-      apiUrl: apiUrl.trim() || undefined,
-      model: model.trim() || defaultModels[provider] || undefined,
-    });
+    try {
+      // Save API key to HTTP-only cookie via API endpoint
+      const response = await fetch("/api/ai-config", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          provider,
+          apiKey: apiKey.trim(),
+          apiUrl: apiUrl.trim() || undefined,
+          model: model.trim() || defaultModels[provider] || undefined,
+          expirationDays,
+        }),
+      });
 
-    setIsOpen(false);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to save AI configuration");
+      }
+
+      // Store non-sensitive config in store (without apiKey)
+      setAIConfig({
+        provider,
+        apiKey: "", // Don't store in localStorage
+        apiUrl: apiUrl.trim() || undefined,
+        model: model.trim() || defaultModels[provider] || undefined,
+      });
+
+      setIsOpen(false);
+    } catch (error) {
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Failed to save AI configuration"
+      );
+    }
   };
 
-  const handleClear = () => {
-    setAIConfig(null);
-    setApiKey("");
-    setApiUrl("");
-    setModel(defaultModels[provider]);
-    setIsOpen(false);
+  const handleClear = async () => {
+    try {
+      // Clear the HTTP-only cookie
+      await fetch("/api/ai-config", {
+        method: "DELETE",
+      });
+
+      setAIConfig(null);
+      setApiKey("");
+      setApiUrl("");
+      setModel(defaultModels[provider]);
+      setIsOpen(false);
+    } catch (error) {
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Failed to clear AI configuration"
+      );
+    }
   };
 
   const handleProviderChange = (newProvider: LLMProvider) => {
@@ -113,6 +163,12 @@ export const AISettings = () => {
             <label className="block text-sm font-medium text-primary-700 dark:text-primary-200">
               {t("aiApiKey") || "API Key"}
             </label>
+            <div className="mt-1 space-y-1">
+              <p className="text-xs text-primary-600/70 dark:text-primary-300/70">
+                {t("aiApiKeyHint") ||
+                  "Stored in HTTP-only cookie, local and safe"}
+              </p>
+            </div>
             <input
               type="password"
               value={apiKey}
@@ -120,9 +176,58 @@ export const AISettings = () => {
               placeholder={t("aiApiKeyPlaceholder") || "Enter your API key"}
               className="mt-1 w-full rounded-lg border border-surface-200 bg-white px-3 py-2 text-sm text-primary-700 outline-none transition focus:border-primary-400 dark:border-surface-600 dark:bg-surface-800 dark:text-primary-200"
             />
-            <p className="mt-1 text-xs text-primary-600/70 dark:text-primary-300/70">
-              {t("aiApiKeyHint") || "Stored locally in your browser"}
-            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-primary-700 dark:text-primary-200">
+              {t("aiCookieExpiration") || "Cookie Expiration"}
+            </label>
+            <div className="mt-1 space-y-1">
+              <p className="mt-1 text-xs text-primary-600/70 dark:text-primary-300/70">
+                {(
+                  t("aiCookieExpirationHint") ||
+                  "Expires in {days} days • SameSite: Lax (secure same-site requests)"
+                ).replace("{days}", expirationDays.toString())}
+              </p>
+            </div>
+            <select
+              value={expirationDays}
+              onChange={(e) => setExpirationDays(Number(e.target.value))}
+              className="mt-1 w-full rounded-lg border border-surface-200 bg-white px-3 py-2 text-sm text-primary-700 outline-none transition focus:border-primary-400 dark:border-surface-600 dark:bg-surface-800 dark:text-primary-200"
+            >
+              <option value={15}>
+                15 {t("aiCookieExpirationDays") || "days"}
+              </option>
+              <option value={30}>
+                30 {t("aiCookieExpirationDays") || "days"}
+              </option>
+              <option value={60}>
+                60 {t("aiCookieExpirationDays") || "days"}
+              </option>
+              <option value={365}>
+                365 {t("aiCookieExpirationDays") || "days"}
+              </option>
+            </select>
+
+            {provider !== "custom" && providerTokenLinks[provider] && (
+              <p className="mt-1 text-xs">
+                <a
+                  href={providerTokenLinks[provider]}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary-500 hover:text-primary-700 underline dark:text-primary-400 dark:hover:text-primary-300"
+                >
+                  {(
+                    t("aiGetApiKey") || "How to get {provider} API key"
+                  ).replace(
+                    "{provider}",
+                    providerOptions.find((p) => p.value === provider)?.label ||
+                      ""
+                  )}{" "}
+                  →
+                </a>
+              </p>
+            )}
           </div>
 
           {provider === "custom" && (
@@ -191,7 +296,9 @@ export const AISettings = () => {
       >
         {aiConfig ? "🤖 AI ✓" : "🤖 AI"}
       </button>
-      {isMountedRef && modalContent && createPortal(modalContent, document.body)}
+      {isMountedRef &&
+        modalContent &&
+        createPortal(modalContent, document.body)}
     </>
   );
 };

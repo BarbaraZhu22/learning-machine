@@ -106,9 +106,10 @@ export function useFlowController(
           context,
           confirmationNodes,
           continueOnFailure,
+          // Note: apiKey is now stored in HTTP-only cookie, not sent in request body
           aiConfig: aiConfig ? {
             provider: aiConfig.provider,
-            apiKey: aiConfig.apiKey,
+            // Don't send apiKey - it's read from HTTP-only cookie on server
             apiUrl: aiConfig.apiUrl,
             model: aiConfig.model,
           } : undefined,

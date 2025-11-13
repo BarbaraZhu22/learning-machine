@@ -11,6 +11,8 @@ import type {
 import { executeFlowStream } from '@/lib/lm-ai/server-flow';
 import { createSimulateDialogFlow, createExtendVocabularyFlow } from '@/lib/lm-ai/flow';
 
+const COOKIE_NAME = 'ai-api-key';
+
 // Flow registry
 const flowRegistry: Record<string, () => FlowConfig> = {
   'simulate-dialog': () => {
@@ -48,18 +50,30 @@ export async function POST(request: NextRequest) {
       flowConfig.continueOnFailure = body.continueOnFailure;
     }
 
+    // Get API key from HTTP-only cookie
+    const cookieApiKey = request.cookies.get(COOKIE_NAME)?.value;
+
     // Apply user-provided AI config to all LLM nodes
+    // Note: apiKey is now read from cookie, not from request body
     if (body.aiConfig) {
       flowConfig.nodes.forEach((node) => {
         if (node.nodeType === 'llm') {
           node.config.provider = body.aiConfig!.provider as 'deepseek' | 'openai' | 'anthropic' | 'custom';
-          node.config.apiKey = body.aiConfig!.apiKey;
+          // Use API key from cookie if available, otherwise fall back to env vars
+          node.config.apiKey = cookieApiKey;
           if (body.aiConfig!.apiUrl) {
             node.config.apiUrl = body.aiConfig!.apiUrl;
           }
           if (body.aiConfig!.model) {
             node.config.model = body.aiConfig!.model;
           }
+        }
+      });
+    } else if (cookieApiKey) {
+      // If no aiConfig provided but cookie exists, apply cookie to all LLM nodes
+      flowConfig.nodes.forEach((node) => {
+        if (node.nodeType === 'llm') {
+          node.config.apiKey = cookieApiKey;
         }
       });
     }

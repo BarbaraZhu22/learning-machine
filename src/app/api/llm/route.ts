@@ -1,24 +1,25 @@
 /**
  * Next.js API Route for LLM calls
- * Keeps API keys secure on the server side
+ * Keeps API keys secure on the server side using HTTP-only cookies
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import type { LLMProvider, LLMAPIRequest } from '@/lib/lm-ai/types';
+
+const COOKIE_NAME = 'ai-api-key';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const {
       provider,
-      apiKey,
       apiUrl,
       model,
       messages,
       temperature,
       maxTokens,
       responseFormat,
-    } = body as LLMAPIRequest;
+    } = body as Omit<LLMAPIRequest, 'apiKey'>;
 
     // Validate required fields
     if (!provider || !messages) {
@@ -28,8 +29,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get API key from environment or request
-    const finalApiKey = apiKey || getApiKeyForProvider(provider);
+    // Get API key from HTTP-only cookie or environment variables
+    const cookieApiKey = request.cookies.get(COOKIE_NAME)?.value;
+    const finalApiKey = cookieApiKey || getApiKeyForProvider(provider);
     
     if (!finalApiKey && provider !== 'custom') {
       return NextResponse.json(

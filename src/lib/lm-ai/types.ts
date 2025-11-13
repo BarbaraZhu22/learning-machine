@@ -164,11 +164,12 @@ export interface FlowExecutionRequest {
   confirmationNodes?: string[];
   continueOnFailure?: boolean;
   /**
-   * User-provided AI configuration (from localStorage)
+   * User-provided AI configuration
+   * Note: apiKey is stored in HTTP-only cookie, not sent in request body
    */
   aiConfig?: {
     provider: string;
-    apiKey: string;
+    apiKey?: string; // Optional - read from HTTP-only cookie on server
     apiUrl?: string;
     model?: string;
   };

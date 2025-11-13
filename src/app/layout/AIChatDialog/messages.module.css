@@ -1,0 +1,223 @@
+/* Chat Messages Container */
+.chatContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(var(--surface-200), 0.5);
+  background: var(--glass-base);
+  padding: 1rem;
+  box-shadow: 0 10px 15px -3px rgba(var(--primary-100), 0.4);
+  backdrop-filter: blur(8px);
+}
+
+@media (prefers-color-scheme: dark) {
+  .chatContainer {
+    border-color: rgba(var(--surface-700), 1);
+    background: var(--surface-900);
+  }
+}
+
+.messagesContainer {
+  max-height: 24rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+}
+
+.emptyState {
+  text-align: center;
+  font-size: 0.875rem;
+  color: var(--muted-foreground);
+}
+
+/* Regular Message Bubbles */
+.messageWrapper {
+  display: flex;
+}
+
+.messageWrapperUser {
+  justify-content: flex-end;
+}
+
+.messageWrapperAssistant {
+  justify-content: flex-start;
+}
+
+.messageBubble {
+  max-width: 80%;
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+}
+
+.messageBubbleUser {
+  background-color: var(--primary-500);
+  color: white;
+}
+
+.messageBubbleAssistant {
+  background-color: var(--surface-100);
+  color: var(--surface-900);
+}
+
+@media (prefers-color-scheme: dark) {
+  .messageBubbleAssistant {
+    background-color: var(--surface-800);
+    color: var(--surface-100);
+  }
+}
+
+.messageContent {
+  white-space: pre-wrap;
+  font-size: 0.875rem;
+}
+
+.messageTimestamp {
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+
+.typingCursor {
+  display: inline-block;
+  animation: blink-cursor 1s step-end infinite;
+  margin-left: 0.125rem;
+}
+
+@keyframes blink-cursor {
+  0%, 50% {
+    opacity: 1;
+  }
+  51%, 100% {
+    opacity: 0;
+  }
+}
+
+/* Flow Task (Flag Style) */
+.flowTaskWrapper {
+  position: relative;
+  max-width: 80%;
+}
+
+.flowTaskFlag {
+  position: absolute;
+  left: -0.5rem;
+  top: 0;
+  height: 0;
+  width: 0;
+  border-left: 8px solid var(--primary-500);
+  border-top: 8px solid transparent;
+  border-bottom: 8px solid transparent;
+}
+
+@media (prefers-color-scheme: dark) {
+  .flowTaskFlag {
+    border-left-color: var(--primary-600);
+  }
+}
+
+.flowTaskBubble {
+  border-radius: 0 0.5rem 0.5rem 0;
+  border-left: 4px solid var(--primary-500);
+  background-color: rgba(var(--primary-50), 1);
+  padding: 0.5rem 0.75rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  .flowTaskBubble {
+    border-left-color: var(--primary-600);
+    background-color: rgba(var(--primary-900), 0.2);
+  }
+}
+
+.flowTaskHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.flowTaskDot {
+  height: 0.5rem;
+  width: 0.5rem;
+  border-radius: 9999px;
+  background-color: var(--primary-500);
+}
+
+.flowTaskDotTyping {
+  animation: pulse-dot 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.flowTaskName {
+  font-weight: 600;
+  color: var(--primary-700);
+}
+
+@media (prefers-color-scheme: dark) {
+  .flowTaskName {
+    color: var(--primary-300);
+  }
+}
+
+.flowTaskContent {
+  margin-top: 0.5rem;
+  white-space: pre-wrap;
+  font-size: 0.875rem;
+  color: var(--surface-700);
+}
+
+@media (prefers-color-scheme: dark) {
+  .flowTaskContent {
+    color: var(--surface-300);
+  }
+}
+
+.flowTaskTypingIndicator {
+  margin-left: 0.25rem;
+  display: inline-block;
+  animation: blink-cursor 1s step-end infinite;
+}
+
+.flowTaskTypingDots {
+  margin-top: 0.25rem;
+  display: flex;
+  gap: 0.25rem;
+}
+
+.flowTaskTypingDot {
+  height: 0.25rem;
+  width: 0.25rem;
+  animation: bounce-dot 1.4s infinite;
+  border-radius: 9999px;
+  background-color: var(--primary-400);
+}
+
+.flowTaskTimestamp {
+  margin-top: 0.25rem;
+  font-size: 0.625rem;
+  opacity: 0.7;
+}
+
+@keyframes bounce-dot {
+  0%, 80%, 100% {
+    transform: translateY(0);
+    opacity: 0.7;
+  }
+  40% {
+    transform: translateY(-0.25rem);
+    opacity: 1;
+  }
+}
+
+@keyframes pulse-dot {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.2);
+  }
+}
+

@@ -61,6 +61,26 @@ export function createPreNode(
           output = context.input;
           break;
 
+        case 'validate-and-transform':
+          // First validate
+          const validateResult = await validateInput(
+            context.input,
+            config.validationRules || []
+          );
+          if (!validateResult.valid) {
+            return {
+              success: false,
+              output: context.input,
+              error: validateResult.error,
+            };
+          }
+          // Then transform
+          output = await transformMessage(
+            context.input,
+            config.targetStructure
+          );
+          break;
+
         default:
           output = context.input;
       }

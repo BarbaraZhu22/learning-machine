@@ -8,7 +8,7 @@ import {
   type StateStorage,
 } from "zustand/middleware";
 import { defaultNoteTemplates } from "@/data/noteTemplates";
-import { defaultLearningLanguage } from "@/data/learningLanguages";
+import { defaultLearningLanguage, learningLanguages } from "@/data/learningLanguages";
 import { colorThemeMap, defaultColorTheme } from "@/data/colorThemes";
 import {
   LanguageCode,
@@ -270,6 +270,9 @@ export const useAppStore = create<AppState>()(
 export const selectTheme = (state: AppState) => state.theme;
 export const selectLanguage = (state: AppState) => state.language;
 export const selectLearningLanguage = (state: AppState) =>
+  state.learningLanguage;
+export const selectLearningLanguageLabel = (state: AppState) =>
+  learningLanguages.find((item) => item.code === state.learningLanguage)?.label ??
   state.learningLanguage;
 export const selectColorTheme = (state: AppState) => state.colorTheme;
 export const selectNoteTemplates = (state: AppState) => state.noteTemplates;

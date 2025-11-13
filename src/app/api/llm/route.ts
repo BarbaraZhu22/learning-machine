@@ -57,7 +57,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, data: response });
   } catch (error) {
-    console.error('LLM API error:', error);
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : 'Unknown error',

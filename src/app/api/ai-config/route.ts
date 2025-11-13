@@ -66,7 +66,6 @@ export async function POST(request: NextRequest) {
 
     return response;
   } catch (error) {
-    console.error('AI config save error:', error);
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -88,7 +87,6 @@ export async function DELETE(request: NextRequest) {
 
     return response;
   } catch (error) {
-    console.error('AI config clear error:', error);
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : 'Unknown error',

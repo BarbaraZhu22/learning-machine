@@ -2,9 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { RelationType, VocabularyEntry, VocabularyRelation } from '@/types';
-import { useAppStore, selectVocabulary, selectLearningLanguage } from '@/store/useAppStore';
+import { useAppStore, selectVocabulary, selectLearningLanguage, selectLearningLanguageLabel } from '@/store/useAppStore';
 import { useTranslation } from '@/hooks/useTranslation';
-import { learningLanguages } from '@/data/learningLanguages';
 
 const RELATION_LABELS: Record<RelationType, string> = {
   similar: 'Similar',
@@ -72,8 +71,7 @@ export const LinkNetwork = () => {
     setNewMeaning('');
   }, [learningLanguage]);
 
-  const learningLanguageLabel =
-    learningLanguages.find((item) => item.code === learningLanguage)?.label ?? learningLanguage;
+  const learningLanguageLabel = useAppStore(selectLearningLanguageLabel);
 
   const vocabulary = useMemo(
     () => allVocabulary.filter((entry) => entry.learningLanguage === learningLanguage),

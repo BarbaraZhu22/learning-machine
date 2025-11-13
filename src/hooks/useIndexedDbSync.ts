@@ -33,7 +33,7 @@ export const useIndexedDbSync = () => {
           );
         }
       } catch (error) {
-        console.error('Failed to load IndexedDB data', error);
+        // Silently handle IndexedDB load errors
       }
     };
 

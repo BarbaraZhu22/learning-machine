@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { ThemeSwitcher } from "@/components/layout/ThemeSwitcher";
-import { LanguageSwitcher } from "@/components/layout/LanguageSwitcher";
-import { ColorThemeSwitcher } from "@/components/layout/ColorThemeSwitcher";
-import { AISettings } from "@/components/layout/AISettings";
+import { ThemeSwitcher } from "@/app/layout/ThemeSwitcher";
+import { LanguageSwitcher } from "@/app/layout/LanguageSwitcher";
+import { ColorThemeSwitcher } from "@/app/layout/ColorThemeSwitcher";
+import { AISettings } from "@/app/layout/AISettings";
 import { useTranslation } from "@/hooks/useTranslation";
 
 const NAV_ITEMS = [

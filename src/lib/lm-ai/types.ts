@@ -7,10 +7,12 @@ export type PreNodeType =
   | 'summarize'
   | 'organize'
   | 'transform-message'
-  | 'validate-input';
+  | 'validate-input'
+  | 'validate-and-transform';
 
 export type LLMNodeType =
   | 'dialog-analysis'
+  | 'dialog-generation'
   | 'dialog-check'
   | 'dialog-audio'
   | 'extension-analysis'
@@ -26,7 +28,8 @@ export interface NodeContext {
   input: unknown;
   previousOutput?: unknown;
   metadata?: Record<string, unknown>;
-  learningLanguage?: string;
+  learningLanguage?: string; // Language the user wants to learn
+  userLanguage?: string; // Language the user uses (UI language)
   [key: string]: unknown;
 }
 

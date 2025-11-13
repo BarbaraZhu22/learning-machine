@@ -1,10 +1,9 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { useAppStore, selectVocabulary, selectLearningLanguage } from '@/store/useAppStore';
+import { useAppStore, selectVocabulary, selectLearningLanguage, selectLearningLanguageLabel } from '@/store/useAppStore';
 import { VocabularyEntry } from '@/types';
 import { useTranslation } from '@/hooks/useTranslation';
-import { learningLanguages } from '@/data/learningLanguages';
 
 type EditingState = {
   id: string;
@@ -34,8 +33,7 @@ export const VocabularyDashboard = () => {
     setFilter('');
   }, [learningLanguage]);
 
-  const learningLanguageLabel =
-    learningLanguages.find((item) => item.code === learningLanguage)?.label ?? learningLanguage;
+  const learningLanguageLabel = useAppStore(selectLearningLanguageLabel);
 
   const vocabulary = useMemo(
     () => allVocabulary.filter((entry) => entry.learningLanguage === learningLanguage),

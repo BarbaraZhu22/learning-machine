@@ -11,6 +11,12 @@ import type {
   LLMProvider,
   LLMAPIRequest,
 } from "./types";
+import {
+  getSystemLanguageInstruction,
+  getUserLanguageContext,
+  getDialogFormatInstructions,
+  getDialogValidationInstructions,
+} from "./language-hints";
 
 /**
  * Create an LLM Node
@@ -25,13 +31,17 @@ export function createLLMNode(
   const execute = async (context: NodeContext): Promise<NodeResult> => {
     try {
       const provider = config.provider || "deepseek";
-      const input = context.previousOutput || context.input;
+      const input = context.input;
+      const previousOutput = context.previousOutput;
 
       // Transform input to message structure based on provider
       const messages = await prepareMessages(
         input,
         config.userPromptTemplate,
-        config.systemPrompt
+        config.systemPrompt,
+        config.responseFormat,
+        previousOutput,
+        context
       );
 
       // Direct API call (nodes only run server-side)
@@ -85,22 +95,61 @@ export function createLLMNode(
 async function prepareMessages(
   input: unknown,
   userPromptTemplate?: string,
-  systemPrompt?: string
+  systemPrompt?: string,
+  responseFormat?: string,
+  previousOutput?: unknown,
+  context?: NodeContext
 ): Promise<Array<{ role: string; content: string }>> {
   const messages: Array<{ role: string; content: string }> = [];
 
+  // Helper to replace template variables
+  const replaceTemplateVars = (template: string): string => {
+    const inputStr =
+      typeof input === "string" ? input : JSON.stringify(input, null, 2);
+    const previousOutputStr =
+      previousOutput !== undefined
+        ? typeof previousOutput === "string"
+          ? previousOutput
+          : JSON.stringify(previousOutput, null, 2)
+        : "";
+    const userLanguage = context?.userLanguage || "en";
+    const learningLanguage = context?.learningLanguage || "english";
+
+    // Replace special instruction variables
+    const dialogFormatInstructions = getDialogFormatInstructions(context);
+    const validationInstructions = getDialogValidationInstructions(context);
+
+    return template
+      .replace(/\{\{input\}\}/g, inputStr)
+      .replace(/\{\{previousOutput\}\}/g, previousOutputStr)
+      .replace(/\{\{userLanguage\}\}/g, userLanguage)
+      .replace(/\{\{learningLanguage\}\}/g, learningLanguage)
+      .replace(/\{\{dialogFormatInstructions\}\}/g, dialogFormatInstructions)
+      .replace(/\{\{validationInstructions\}\}/g, validationInstructions);
+  };
+
   if (systemPrompt) {
-    messages.push({ role: "system", content: systemPrompt });
+    // Automatically prepend language instruction to system prompt
+    const languageInstruction = getSystemLanguageInstruction(context);
+    const fullSystemPrompt = `${languageInstruction}\n\n${replaceTemplateVars(systemPrompt)}`;
+    messages.push({ role: "system", content: fullSystemPrompt });
   }
 
   let userContent = "";
   if (userPromptTemplate) {
-    const inputStr =
-      typeof input === "string" ? input : JSON.stringify(input, null, 2);
-    userContent = userPromptTemplate.replace("{{input}}", inputStr);
+    // Automatically prepend language context to user prompt
+    const languageContext = getUserLanguageContext(context);
+    const templateContent = replaceTemplateVars(userPromptTemplate);
+    userContent = `${languageContext}\n\n${templateContent}`;
   } else {
     userContent =
       typeof input === "string" ? input : JSON.stringify(input, null, 2);
+  }
+
+  // When using JSON response format, ensure the prompt contains the word "json"
+  // This is required by OpenAI/DeepSeek APIs
+  if (responseFormat === "json" && !userContent.toLowerCase().includes("json")) {
+    userContent += "\n\nPlease respond in JSON format.";
   }
 
   messages.push({ role: "user", content: userContent });
@@ -122,7 +171,6 @@ async function callLLMAPI(request: LLMAPIRequest): Promise<unknown> {
     maxTokens,
     responseFormat,
   } = request;
-
   // Default API URLs
   const apiUrls: Record<LLMProvider, string> = {
     deepseek: "https://api.deepseek.com/v1/chat/completions",

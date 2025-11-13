@@ -28,6 +28,7 @@ class FlowSessionManager {
       status: "idle",
       createdAt: Date.now(),
       lastActivity: Date.now(),
+      nodeRetryCount: new Map<string, number>(),
     };
     this.sessions.set(sessionId, session);
     return sessionId;
@@ -76,6 +77,7 @@ interface FlowSession {
     nodeId: string;
     result: NodeResult;
   };
+  nodeRetryCount?: Map<string, number>; // Track retry count per node
 }
 
 const sessionManager = new FlowSessionManager();
@@ -126,12 +128,13 @@ export async function* executeFlowStream(
           step.nodeId
         );
 
-      // Emit step start
+      // Emit step start with state
       const stepStartEvent: FlowEvent = {
         type: "step-start",
         flowId: flowConfig.id,
         stepIndex: state.currentStepIndex,
         nodeId: step.nodeId,
+        data: { sessionId, state },
       };
       yield stepStartEvent;
       onEvent?.(stepStartEvent);
@@ -186,16 +189,26 @@ export async function* executeFlowStream(
         }
       }
 
-      // Emit step complete
+      // Emit step complete with updated state
       const stepCompleteEvent: FlowEvent = {
         type: "step-complete",
         flowId: flowConfig.id,
         stepIndex: state.currentStepIndex,
         nodeId: step.nodeId,
-        data: result.output,
+        data: { output: result.output, state },
       };
       yield stepCompleteEvent;
       onEvent?.(stepCompleteEvent);
+      
+      // Also emit status-change to update UI with current state
+      const statusUpdateEvent: FlowEvent = {
+        type: "status-change",
+        flowId: flowConfig.id,
+        status: state.status,
+        data: { sessionId, state },
+      };
+      yield statusUpdateEvent;
+      onEvent?.(statusUpdateEvent);
 
       // Check if confirmation is required
       if (requiresConfirmation) {
@@ -236,14 +249,33 @@ export async function* executeFlowStream(
         break;
       }
 
+      // Check if we're going back to a previous node (retry scenario)
+      const session = sessionManager.getSession(sessionId);
+      if (session && nextIndex < state.currentStepIndex) {
+        // We're going backwards, increment retry count
+        const retryCount = (session.nodeRetryCount?.get(nextNodeId) || 0) + 1;
+        session.nodeRetryCount?.set(nextNodeId, retryCount);
+        
+        const maxRetries = 3; // Maximum number of retries per node
+        if (retryCount > maxRetries) {
+          state.status = "error";
+          state.error = `Maximum retry limit (${maxRetries}) exceeded for node: ${nextNodeId}`;
+          break;
+        }
+      } else if (session && nextIndex > state.currentStepIndex) {
+        // Moving forward, reset retry count for the next node
+        session.nodeRetryCount?.set(nextNodeId, 0);
+      }
+
       state.currentStepIndex = nextIndex;
     }
 
-    // Emit final status
+    // Emit final status with state
     const finalEvent: FlowEvent = {
       type: "status-change",
       flowId: flowConfig.id,
       status: state.status,
+      data: { sessionId, state },
     };
     yield finalEvent;
     onEvent?.(finalEvent);

@@ -340,7 +340,7 @@ export class FlowBuilder {
 
 /**
  * Flow 1: Simulate Dialog
- * DialogAnalysis => DialogCheck (if not valid back to DialogAnalysis) => DialogAudio
+ * ValidateAndTransform => DialogAnalysis => DialogGeneration => DialogCheck (if not valid back to DialogGeneration) => DialogAudio
  */
 export function createSimulateDialogFlow(
   llmConfig?: {
@@ -357,26 +357,17 @@ export function createSimulateDialogFlow(
   const builder = new FlowBuilder('simulate-dialog', 'Simulate Dialog')
     .setDescription('Generate and validate dialog scenarios');
 
-  // Pre node: Validate input
-  const validateInput = createPreNode(
-    'validate-dialog-input',
-    'Validate Dialog Input',
+  // Pre node: Validate and Transform input (merged)
+  const validateAndTransform = createPreNode(
+    'validate-and-transform-dialog-input',
+    'Validate and Transform Dialog Input',
     {
-      type: 'validate-input',
+      type: 'validate-and-transform',
       validationRules: [
         { field: 'situation', required: true, type: 'string' },
         { field: 'characterA', required: false, type: 'string' },
         { field: 'characterB', required: false, type: 'string' },
       ],
-    }
-  );
-
-  // Pre node: Transform message structure
-  const transformMessage = createPreNode(
-    'transform-dialog-message',
-    'Transform Dialog Message',
-    {
-      type: 'transform-message',
       targetStructure: {
         situation: '',
         characterA: 'Character A',
@@ -399,10 +390,29 @@ export function createSimulateDialogFlow(
       systemPrompt:
         'You are a language learning assistant. Analyze dialog scenarios and extract key information.',
       userPromptTemplate:
-        'Analyze this dialog scenario: {{input}}\n\nProvide: number of characters, situation description, and target language.',
+        'Analyze this dialog scenario: {{input}}\n\nProvide analysis in JSON format with: number_of_characters, situation_description, and target_language.',
       responseFormat: 'json',
     },
     'Analyze dialog scenario to understand characters and situation'
+  );
+
+  // LLM node: Dialog Generation
+  const dialogGeneration = createLLMNode(
+    'dialog-generation',
+    'Dialog Generation',
+    {
+      type: 'dialog-generation',
+      provider: llmConfig?.provider || 'deepseek',
+      apiKey: llmConfig?.apiKey,
+      apiUrl: llmConfig?.apiUrl,
+      model: llmConfig?.model,
+      systemPrompt:
+        'You are a language learning assistant. Generate natural dialog conversations based on the scenario and analysis.',
+      userPromptTemplate:
+        'Based on the analysis: {{input}}\n\n{{dialogFormatInstructions}}\n\nGenerate a natural dialog conversation. The output MUST be in JSON format with:\n- "characters": ["characterAName", "characterBName"]\n- "dialog": [\n    {\n      "character": "characterAName",\n      "use_text": "...",\n      "learn_text": "..."\n    },\n    ...\n  ]\n\nMake the dialog natural, relevant to the situation, and appropriate for language learning.',
+      responseFormat: 'json',
+    },
+    'Generate dialog conversation with both user and learning language'
   );
 
   // LLM node: Dialog Check
@@ -416,12 +426,12 @@ export function createSimulateDialogFlow(
       apiUrl: llmConfig?.apiUrl,
       model: llmConfig?.model,
       systemPrompt:
-        'You are a language learning assistant. Validate dialog content for correctness and relevance.',
+        'You are a language learning assistant. Validate dialog content for correctness, relevance, and quality.',
       userPromptTemplate:
-        'Check if this dialog is valid and related to the analysis: {{input}}',
+        'Validate this generated dialog against the original analysis.\n\nOriginal Analysis:\n{{previousOutput}}\n\nGenerated Dialog:\n{{input}}\n\n{{validationInstructions}}\n\nCheck if the dialog is:\n1. Valid (properly formatted with characters and dialog array)\n2. Relevant to the original scenario and analysis\n3. Appropriate for language learning\n4. Natural and coherent\n\nReturn JSON with:\n- "is_valid": true/false\n- "reasons": ["reason1", "reason2", ...] if not valid',
       responseFormat: 'json',
     },
-    'Validate dialog correctness and relevance'
+    'Validate generated dialog correctness and relevance'
   );
 
   // LLM node: Dialog Audio (preparation)
@@ -443,9 +453,9 @@ export function createSimulateDialogFlow(
   );
 
   const flow = builder
-    .addNode(validateInput)
-    .addNode(transformMessage)
+    .addNode(validateAndTransform)
     .addNode(dialogAnalysis)
+    .addNode(dialogGeneration)
     .addNode(dialogCheck)
     .addNode(dialogAudio)
     .addCondition({
@@ -453,10 +463,15 @@ export function createSimulateDialogFlow(
       condition: (result) => {
         if (!result.success) return false;
         const output = result.output as Record<string, unknown>;
-        return output.valid === true || output.isValid === true;
+        // Check for various possible field names
+        return (
+          output.valid === true ||
+          output.isValid === true ||
+          output.is_valid === true
+        );
       },
       onTrue: 'dialog-audio',
-      onFalse: 'dialog-analysis', // Go back to analysis if check fails
+      onFalse: 'dialog-generation', // Go back to generation if check fails
     })
     .build();
 

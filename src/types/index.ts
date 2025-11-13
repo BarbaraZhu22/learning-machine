@@ -75,3 +75,12 @@ export interface DialogScenario {
   createdAt: string;
 }
 
+export type LLMProvider = 'deepseek' | 'openai' | 'anthropic' | 'custom';
+
+export interface AIConfig {
+  provider: LLMProvider;
+  apiKey: string;
+  apiUrl?: string;
+  model?: string;
+}
+

@@ -19,6 +19,7 @@ import {
   ThemeMode,
   VocabularyEntry,
   VocabularyRelation,
+  AIConfig,
 } from "@/types";
 import { indexedDbClient } from "@/lib/indexedDb";
 
@@ -41,6 +42,7 @@ interface AppState {
   language: LanguageCode;
   learningLanguage: LearningLanguageCode;
   colorTheme: ColorThemeKey;
+  aiConfig: AIConfig | null;
   noteTemplates: NoteTemplate[];
   notes: NoteRecord[];
   vocabulary: VocabularyEntry[];
@@ -48,6 +50,7 @@ interface AppState {
   setLanguage: (language: LanguageCode) => void;
   setLearningLanguage: (language: LearningLanguageCode) => void;
   setColorTheme: (theme: ColorThemeKey) => void;
+  setAIConfig: (config: AIConfig | null) => void;
   setNoteTemplates: (templates: NoteTemplate[]) => void;
   upsertTemplate: (template: NoteTemplate) => void;
   removeTemplate: (id: string) => void;
@@ -94,6 +97,7 @@ export const useAppStore = create<AppState>()(
         language: "zh",
         learningLanguage: defaultLearningLanguage,
         colorTheme: defaultColorTheme,
+        aiConfig: null,
         noteTemplates: defaultNoteTemplates,
         notes: [],
         vocabulary: [],
@@ -109,6 +113,8 @@ export const useAppStore = create<AppState>()(
             set({ colorTheme });
           }
         },
+
+        setAIConfig: (aiConfig) => set({ aiConfig }),
 
         setNoteTemplates: (templates) => set({ noteTemplates: [...templates] }),
 
@@ -245,6 +251,7 @@ export const useAppStore = create<AppState>()(
           language: state.language,
           learningLanguage: state.learningLanguage,
           colorTheme: state.colorTheme,
+          aiConfig: state.aiConfig,
           noteTemplates: state.noteTemplates,
         }),
       }

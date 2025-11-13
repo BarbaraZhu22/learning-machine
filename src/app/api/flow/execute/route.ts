@@ -53,6 +53,30 @@ export async function POST(request: NextRequest) {
     // Get API key from HTTP-only cookie
     const cookieApiKey = request.cookies.get(COOKIE_NAME)?.value;
 
+    // Check if API key is required (if flow has LLM nodes)
+    const hasLLMNodes = flowConfig.nodes.some((node) => node.nodeType === 'llm');
+    if (hasLLMNodes && !cookieApiKey) {
+      // Check if any LLM node requires an API key (not custom provider)
+      const needsApiKey = flowConfig.nodes.some(
+        (node) => {
+          if (node.nodeType !== 'llm') return false;
+          // If aiConfig is provided, use that provider, otherwise use node's default
+          const provider = body.aiConfig?.provider || node.config.provider || 'deepseek';
+          return provider !== 'custom';
+        }
+      );
+      
+      if (needsApiKey) {
+        return new Response(
+          JSON.stringify({
+            error: 'API_KEY_MISSING',
+            message: 'API key not configured. Please fill in your API key in AI Settings.',
+          }),
+          { status: 401, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
     // Apply user-provided AI config to all LLM nodes
     // Note: apiKey is now read from cookie, not from request body
     if (body.aiConfig) {
@@ -97,9 +121,13 @@ export async function POST(request: NextRequest) {
           
           controller.close();
         } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          // Check if it's an API key missing error
+          const isApiKeyMissing = errorMessage.includes('API key') || errorMessage.includes('API_KEY_MISSING');
           const errorData = JSON.stringify({
             type: 'error',
-            error: error instanceof Error ? error.message : 'Unknown error',
+            error: isApiKeyMissing ? 'API_KEY_MISSING' : errorMessage,
+            message: isApiKeyMissing ? 'API key not configured. Please fill in your API key in AI Settings.' : errorMessage,
           });
           controller.enqueue(encoder.encode(`data: ${errorData}\n\n`));
           controller.close();

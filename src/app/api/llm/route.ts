@@ -35,8 +35,11 @@ export async function POST(request: NextRequest) {
     
     if (!finalApiKey && provider !== 'custom') {
       return NextResponse.json(
-        { error: `API key not configured for provider: ${provider}` },
-        { status: 400 }
+        { 
+          error: 'API_KEY_MISSING',
+          message: 'API key not configured. Please fill in your API key in AI Settings.',
+        },
+        { status: 401 }
       );
     }
 

@@ -13,6 +13,7 @@ import type {
   FlowExecutionRequest,
 } from '@/lib/lm-ai/types';
 import { useAppStore } from '@/store/useAppStore';
+import { useTranslation } from '@/hooks/useTranslation';
 
 interface UseFlowControllerOptions {
   flowId: string;
@@ -52,6 +53,7 @@ export function useFlowController(
     continueOnFailure,
   } = options;
 
+  const { t } = useTranslation();
   const aiConfig = useAppStore((state) => state.aiConfig);
 
   const [state, setState] = useState<FlowState | null>(null);
@@ -126,7 +128,12 @@ export function useFlowController(
 
         if (!response.ok) {
           const errorData = await response.json();
-          throw new Error(errorData.error || 'Flow execution failed');
+          // Handle API key missing error with translated message
+          if (errorData.error === 'API_KEY_MISSING') {
+            const errorMessage = `${t('aiApiKeyMissing')}: ${t('aiApiKeyMissingMessage')}`;
+            throw new Error(errorMessage);
+          }
+          throw new Error(errorData.message || errorData.error || 'Flow execution failed');
         }
 
         // Handle streaming response
@@ -158,6 +165,24 @@ export function useFlowController(
                   // Session ID will be in the state, we'll get it from status endpoint
                 }
 
+                // Handle error events with API key missing
+                if (event.type === 'step-error' && event.error) {
+                  const errorMsg = event.error;
+                  if (errorMsg.includes('API_KEY_MISSING') || errorMsg.includes('API key not configured')) {
+                    const translatedError = `${t('aiApiKeyMissing')}: ${t('aiApiKeyMissingMessage')}`;
+                    setError(translatedError);
+                    setState((prev) => {
+                      if (prev) {
+                        const updated: FlowState = { ...prev, status: 'error' as FlowStatus, error: translatedError };
+                        updateState(updated);
+                        return updated;
+                      }
+                      return prev;
+                    });
+                    return;
+                  }
+                }
+
                 handleEvent(event);
 
                 // Extract session ID from state if available in event
@@ -178,10 +203,15 @@ export function useFlowController(
         }
       } catch (err) {
         if (err instanceof Error && err.name !== 'AbortError') {
-          setError(err.message);
+          // Check if it's an API key missing error and translate it
+          let errorMessage = err.message;
+          if (err.message.includes('API_KEY_MISSING') || err.message.includes('API key not configured')) {
+            errorMessage = `${t('aiApiKeyMissing')}: ${t('aiApiKeyMissingMessage')}`;
+          }
+          setError(errorMessage);
           setState((prev) => {
             if (prev) {
-              const updated: FlowState = { ...prev, status: 'error' as FlowStatus, error: err.message };
+              const updated: FlowState = { ...prev, status: 'error' as FlowStatus, error: errorMessage };
               updateState(updated);
               return updated;
             }
@@ -190,7 +220,7 @@ export function useFlowController(
         }
       }
     },
-    [flowId, confirmationNodes, continueOnFailure, handleEvent, updateState]
+    [flowId, confirmationNodes, continueOnFailure, handleEvent, updateState, t]
   );
 
   const controlFlow = useCallback(

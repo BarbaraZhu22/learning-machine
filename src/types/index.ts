@@ -2,7 +2,20 @@ export type ThemeMode = 'light' | 'dark' | 'system';
 
 export type LanguageCode = 'en' | 'zh';
 
-export type LearningLanguageCode = 'english' | 'spanish' | 'french' | 'japanese' | 'chinese';
+export type LearningLanguageCode = 
+  | 'english' 
+  | 'spanish' 
+  | 'french' 
+  | 'japanese' 
+  | 'chinese'
+  | 'german'
+  | 'portuguese'
+  | 'italian'
+  | 'russian'
+  | 'korean'
+  | 'turkish'
+  | 'dutch'
+  | 'polish';
 
 export type ColorThemeKey = 'blue' | 'purple' | 'green' | 'grey';
 

@@ -38,12 +38,12 @@ export const SiteHeader = () => {
                 {t(item.labelKey)}
               </Link>
             ))}
+            <AISettings />
           </nav>
         </div>
         <div className="group absolute right-3 top-4 z-30 flex scale-65  origin-top-right flex-row-reverse items-center justify-end gap-1 rounded-full border border-surface-200/60 bg-[color:var(--glass-base)] px-2 py-1 text-[0.68rem] shadow-sm backdrop-blur-md transition-all duration-200 dark:border-surface-700/60 dark:bg-surface-900/75 md:static md:ml-auto md:scale-100 md:flex-row md:gap-2 md:px-3 md:py-2 md:text-sm">
           <LanguageSwitcher />
           <div className="hidden flex-row-reverse items-center justify-end gap-1 group-focus-within:flex group-hover:flex md:flex md:flex-row md:justify-end md:gap-2">
-            <AISettings />
             <ThemeSwitcher />
             <ColorThemeSwitcher />
           </div>

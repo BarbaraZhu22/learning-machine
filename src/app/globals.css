@@ -126,6 +126,10 @@ html[data-theme="dark"] body {
   );
 }
 
+button {
+  cursor: pointer;
+}
+
 .scrollbar-none {
   -ms-overflow-style: none;
   scrollbar-width: none;

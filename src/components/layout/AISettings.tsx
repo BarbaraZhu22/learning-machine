@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, FormEvent } from "react";
+import { useState, FormEvent, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "@/hooks/useTranslation";
 import { useAppStore } from "@/store/useAppStore";
 import type { LLMProvider } from "@/types";
@@ -24,6 +25,7 @@ export const AISettings = () => {
   const aiConfig = useAppStore((state) => state.aiConfig);
   const setAIConfig = useAppStore((state) => state.setAIConfig);
 
+  const isMountedRef = useRef(false);
   const [isOpen, setIsOpen] = useState(false);
   const [provider, setProvider] = useState<LLMProvider>(
     aiConfig?.provider || "deepseek"
@@ -33,6 +35,11 @@ export const AISettings = () => {
   const [model, setModel] = useState(
     aiConfig?.model || defaultModels[provider]
   );
+
+  // Ensure component is mounted before using portal
+  useEffect(() => {
+    isMountedRef.current = true;
+  }, []);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -68,19 +75,7 @@ export const AISettings = () => {
     }
   };
 
-  if (!isOpen) {
-    return (
-      <button
-        onClick={() => setIsOpen(true)}
-        className="rounded-full border border-surface-200/60 bg-[color:var(--glass-base)] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary-700 shadow-sm backdrop-blur transition hover:border-primary-400 hover:bg-[color:var(--glass-accent)] dark:border-surface-600 dark:bg-surface-800/70 dark:text-primary-200 dark:hover:border-surface-500"
-        title={t("aiSettings") || "AI Settings"}
-      >
-        {aiConfig ? "🤖 AI ✓" : "🤖 AI"}
-      </button>
-    );
-  }
-
-  return (
+  const modalContent = isOpen ? (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div className="relative w-full max-w-md rounded-xl border border-surface-200/50 bg-[color:var(--glass-base)] p-6 shadow-2xl backdrop-blur dark:border-surface-700 dark:bg-surface-900">
         <button
@@ -185,5 +180,18 @@ export const AISettings = () => {
         </form>
       </div>
     </div>
+  ) : null;
+
+  return (
+    <>
+      <button
+        onClick={() => setIsOpen(true)}
+        className="rounded-full border border-surface-200/60 bg-[color:var(--glass-base)] px-3 py-1 font-medium text-primary-700 shadow-sm transition hover:-translate-y-0.5 hover:border-surface-300/60 hover:bg-[color:var(--glass-accent)] hover:text-primary-900 dark:border-surface-700/60 dark:bg-surface-800/65 dark:text-primary-200 dark:hover:border-surface-600/60 dark:hover:bg-surface-800/80 dark:hover:text-primary-100"
+        title={t("aiSettings") || "AI Settings"}
+      >
+        {aiConfig ? "🤖 AI ✓" : "🤖 AI"}
+      </button>
+      {isMountedRef && modalContent && createPortal(modalContent, document.body)}
+    </>
   );
 };

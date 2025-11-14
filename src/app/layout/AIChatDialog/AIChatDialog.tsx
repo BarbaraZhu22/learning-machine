@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState, useCallback, useEffect } from "react";
+import { FormEvent, useState, useCallback, useEffect, useRef } from "react";
 import { useTranslation } from "@/hooks/useTranslation";
 import { useFlowController } from "@/hooks/useFlowController";
 import { useAppStore } from "@/store/useAppStore";
@@ -11,15 +11,16 @@ import {
   formatOutput,
   parseWorkflowInput,
   extractFinalOutput,
-  isStepStartMessage,
+  shouldShowNodeResponse,
 } from "./utils";
-import containerStyles from "./index.module.css";
-import workflowStyles from "./workflow.module.css";
-import messageStyles from "./messages.module.css";
-import formStyles from "./form.module.css";
+import { TypingMessageBox } from "./TypingMessageBox";
+import containerStyles from "./css/index.module.css";
+import workflowStyles from "./css/workflow.module.css";
+import messageStyles from "./css/messages.module.css";
+import formStyles from "./css/form.module.css";
 
 export interface AIChatDialogProps {
-  action?: string; // e.g., "simulate-dialog"
+  action?: string; // e.g., "simulate-dialog" or undefined for regular chat
   placeholder?: string;
   onSubmit?: (message: string) => void;
   onResponse?: (response: string) => void;
@@ -28,9 +29,16 @@ export interface AIChatDialogProps {
 
 interface ChatMessage {
   id: string;
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "workflow";
   content: string;
   timestamp: Date;
+  nodeName?: string;
+  isRunning?: boolean;
+  hasError?: boolean;
+  needsConfirmation?: boolean;
+  confirmationNodeId?: string;
+  showResponse?: boolean; // Whether to show content (header always shows except for chat)
+  isChatFlow?: boolean; // Whether this is a chat flow (affects header visibility)
 }
 
 export const AIChatDialog = ({
@@ -45,89 +53,129 @@ export const AIChatDialog = ({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const aiConfig = useAppStore((state) => state.aiConfig);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
 
-  // Flow controller for workflow mode
+  // Extension state
+  const [waitingForExtension, setWaitingForExtension] = useState(false);
+
+  // Determine flowId: use action if provided, otherwise use "chat" for regular chat
+  const flowId = action || "chat";
+
+  // Flow controller - always use workflow approach
   const {
     state: flowState,
     status: flowStatus,
     error: flowError,
     isRunning,
+    isWaitingConfirmation,
     currentStep,
     execute: executeFlow,
     reset: resetFlow,
+    confirm: confirmFlow,
+    reject: rejectFlow,
+    extend: extendFlow,
   } = useFlowController({
-    flowId: action || "",
-    onEvent: (event: FlowEvent) => {
-      // Handle flow events
+      flowId,
+      onEvent: (event: FlowEvent) => {
+        // Handle flow events - unified approach for all workflows
       if (event.type === "step-start") {
-        // When a step starts, create a new message for this node
         const eventData = event.data as { state?: FlowState } | undefined;
         const stateFromEvent = eventData?.state;
-        const nodeName = getNodeName(event.nodeId, stateFromEvent || flowState || undefined);
+        const currentState = stateFromEvent || flowState || undefined;
+        const nodeName = getNodeName(event.nodeId, currentState);
+        const showResponse = shouldShowNodeResponse(event.nodeId, currentState);
+        const isChatFlow = flowId === "chat";
+
         setMessages((prev) => [
           ...prev,
           {
             id: createId(),
-            role: "assistant",
-            content: `🔄 **${nodeName}**\n\nStarting...`,
+            role: "workflow",
+            content: "",
             timestamp: new Date(),
+            nodeName,
+            isRunning: true,
+            showResponse: showResponse ?? true, // Default to true if undefined
+            isChatFlow,
           },
         ]);
       } else if (event.type === "step-complete" && event.data) {
-        // When a step completes, update the last message with the node's output
         const stepData = event.data as { output?: unknown; state?: FlowState };
         const output = stepData?.output || event.data;
         const stateFromEvent = stepData?.state;
-        const nodeName = getNodeName(event.nodeId, stateFromEvent || flowState || undefined);
+        const currentState = stateFromEvent || flowState || undefined;
+        const nodeName = getNodeName(event.nodeId, currentState);
+        const showResponse = shouldShowNodeResponse(event.nodeId, currentState);
+        const isChatFlow = flowId === "chat";
+
         const outputStr = formatOutput(output);
 
         setMessages((prev) => {
           const lastMsg = prev[prev.length - 1];
           if (
             lastMsg &&
-            lastMsg.role === "assistant" &&
-            isStepStartMessage(lastMsg.content)
+            lastMsg.role === "workflow" &&
+            lastMsg.nodeName === nodeName
           ) {
-            // Update the step-start message with the result
+            // Update existing message: stop typing and ensure content is set
+            // If content was streamed, keep it; otherwise use the output
             return prev.map((msg) =>
               msg.id === lastMsg.id
                 ? {
                     ...msg,
-                    content: `✅ **${nodeName}**\n\n${outputStr}`,
+                    // Keep existing content if it was streamed, otherwise use output
+                    content: msg.content && msg.content.length > 0 ? msg.content : outputStr,
+                    isRunning: false,
+                    hasError: false,
+                    showResponse: showResponse ?? true, // Default to true if undefined
+                    isChatFlow,
                   }
                 : msg
             );
           } else {
-            // Create a new message if we can't find the step-start message
+            // Create new message if it doesn't exist (shouldn't happen, but handle it)
             return [
               ...prev,
               {
                 id: createId(),
-                role: "assistant",
-                content: `✅ **${nodeName}**\n\n${outputStr}`,
+                role: "workflow",
+                content: outputStr,
                 timestamp: new Date(),
+                nodeName,
+                isRunning: false,
+                hasError: false,
+                showResponse: showResponse ?? true, // Default to true if undefined
+                isChatFlow,
               },
             ];
           }
         });
       } else if (event.type === "step-error") {
-        // Handle step errors
         const eventData = event.data as { state?: FlowState } | undefined;
         const stateFromEvent = eventData?.state;
-        const nodeName = getNodeName(event.nodeId, stateFromEvent || flowState || undefined);
+        const currentState = stateFromEvent || flowState || undefined;
+        const nodeName = getNodeName(event.nodeId, currentState);
+        const showResponse = shouldShowNodeResponse(event.nodeId, currentState);
+        const isChatFlow = flowId === "chat";
         const errorMsg = event.error || "Unknown error";
+
         setMessages((prev) => {
           const lastMsg = prev[prev.length - 1];
           if (
             lastMsg &&
-            lastMsg.role === "assistant" &&
-            isStepStartMessage(lastMsg.content)
+            lastMsg.role === "workflow" &&
+            lastMsg.nodeName === nodeName
           ) {
             return prev.map((msg) =>
               msg.id === lastMsg.id
                 ? {
                     ...msg,
-                    content: `❌ **${nodeName}**\n\nError: ${errorMsg}`,
+                    content: `Error: ${errorMsg}`,
+                    isRunning: false,
+                    hasError: true,
+                    showResponse: showResponse ?? true, // Default to true if undefined
+                    isChatFlow,
                   }
                 : msg
             );
@@ -136,25 +184,75 @@ export const AIChatDialog = ({
               ...prev,
               {
                 id: createId(),
-                role: "assistant",
-                content: `❌ **${nodeName}**\n\nError: ${errorMsg}`,
+                role: "workflow",
+                content: `Error: ${errorMsg}`,
                 timestamp: new Date(),
+                nodeName,
+                isRunning: false,
+                hasError: true,
+                showResponse: showResponse ?? true, // Default to true if undefined
+                isChatFlow,
               },
             ];
           }
         });
-      } else if (
-        event.type === "stream-chunk" &&
-        typeof event.data === "string"
-      ) {
-        // Update last assistant message with streaming content
+      } else if (event.type === "stream-chunk") {
+        // Append chunk to the last message (same message box)
+        // Handle both string and JSON data
+        const chunkStr = typeof event.data === "string" 
+          ? event.data 
+          : formatOutput(event.data);
+        
         setMessages((prev) => {
           const lastMsg = prev[prev.length - 1];
-          if (lastMsg && lastMsg.role === "assistant") {
+          if (lastMsg && lastMsg.role === "workflow" && lastMsg.isRunning) {
+            // Append chunk to existing content (incremental update)
             return prev.map((msg) =>
               msg.id === lastMsg.id
-                ? { ...msg, content: event.data as string }
+                ? { ...msg, content: (msg.content || "") + chunkStr }
                 : msg
+            );
+          }
+          return prev;
+        });
+      } else if (event.type === "confirmation-required") {
+        const nodeName = getNodeName(event.nodeId, flowState || undefined);
+        setMessages((prev) => {
+          for (let i = prev.length - 1; i >= 0; i--) {
+            const msg = prev[i];
+            if (msg.role === "workflow") {
+              const matches =
+                msg.nodeName === nodeName ||
+                (event.nodeId &&
+                  msg.nodeName
+                    ?.toLowerCase()
+                    .includes(event.nodeId.toLowerCase()));
+
+              if (matches) {
+                return prev.map((m) =>
+                  m.id === msg.id
+                    ? {
+                        ...m,
+                        needsConfirmation: true,
+                        confirmationNodeId: event.nodeId || "",
+                      }
+                    : m
+                );
+              }
+            }
+          }
+          const lastWorkflowMsg = prev
+            .filter((m) => m.role === "workflow")
+            .pop();
+          if (lastWorkflowMsg) {
+            return prev.map((m) =>
+              m.id === lastWorkflowMsg.id
+                ? {
+                    ...m,
+                    needsConfirmation: true,
+                    confirmationNodeId: event.nodeId || "",
+                  }
+                : m
             );
           }
           return prev;
@@ -163,7 +261,6 @@ export const AIChatDialog = ({
         event.type === "status-change" &&
         event.status === "completed"
       ) {
-        // Final completion
         if (event.data) {
           const eventData = event.data as { state?: FlowState };
           if (eventData?.state) {
@@ -173,121 +270,62 @@ export const AIChatDialog = ({
             }
           }
         }
+        setMessages((prev) =>
+          prev.map((msg) => ({
+            ...msg,
+            needsConfirmation: false,
+            confirmationNodeId: undefined,
+          }))
+        );
+        setWaitingForExtension(false);
       }
     },
     onStateChange: (state: FlowState) => {
       if (state.status === "completed" || state.status === "error") {
         setIsLoading(false);
+        setWaitingForExtension(false);
         if (state.status === "completed") {
           const outputStr = extractFinalOutput(state);
           if (outputStr) {
             onResponse?.(outputStr);
           }
         }
+      } else if (state.status === "waiting-confirmation") {
+        if (!waitingForExtension) {
+          setIsLoading(false);
+        }
       }
     },
   });
 
-  // Regular chat mode (non-workflow)
-  const handleRegularChat = useCallback(
+  // Unified workflow handler - always use workflow approach
+  const handleSubmit = useCallback(
     async (userMessage: string) => {
-      if (!aiConfig) {
-        const error = "AI configuration not set";
-        throw new Error(error);
-      }
-
-      setIsLoading(true);
-      const requestBody = {
-        provider: aiConfig.provider,
-        apiUrl: aiConfig.apiUrl,
-        model: aiConfig.model,
-        messages: [
-          ...messages
-            .filter((m) => m.role === "assistant" || m.role === "user")
-            .map((m) => ({
-              role: m.role === "user" ? "user" : "assistant",
-              content: m.content,
-            })),
-          { role: "user", content: userMessage },
-        ],
-        temperature: 0.7,
-        maxTokens: 2000,
-      };
-
-      try {
-        const response = await fetch("/api/llm", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(requestBody),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || "Failed to get response");
-        }
-
-        const data = await response.json();
-        const assistantMessage = data.data || "";
-
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: createId(),
-            role: "assistant",
-            content: assistantMessage,
-            timestamp: new Date(),
-          },
-        ]);
-
-        onResponse?.(assistantMessage);
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : "Unknown error";
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: createId(),
-            role: "assistant",
-            content: `Error: ${errorMessage}`,
-            timestamp: new Date(),
-          },
-        ]);
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [messages, aiConfig, onResponse]
-  );
-
-  // Workflow mode
-  const handleWorkflowChat = useCallback(
-    async (userMessage: string) => {
-      if (!action) {
-        return;
-      }
-
       setIsLoading(true);
       resetFlow();
 
       // Parse input based on action
-      const input = parseWorkflowInput(action, userMessage);
+      const input = action
+        ? parseWorkflowInput(action, userMessage)
+        : userMessage; // For chat, just pass the message
 
       const appState = useAppStore.getState();
       const context = {
         learningLanguage: appState.learningLanguage,
         userLanguage: appState.language,
+        // For chat flow, include conversation history
+        ...(flowId === "chat" && {
+          conversationHistory: messages
+            .filter(
+              (m) =>
+                m.role === "user" || (m.role === "workflow" && m.isChatFlow)
+            )
+            .map((m) => ({
+              role: m.role === "user" ? "user" : "assistant",
+              content: m.content,
+            })),
+        }),
       };
-
-      // Add initial assistant message for streaming
-      const assistantMsg: ChatMessage = {
-        id: createId(),
-        role: "assistant",
-        content: "",
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, assistantMsg]);
 
       try {
         await executeFlow(input, context);
@@ -296,10 +334,15 @@ export const AIChatDialog = ({
           error instanceof Error ? error.message : "Unknown error";
         setMessages((prev) => {
           const lastMsg = prev[prev.length - 1];
-          if (lastMsg && lastMsg.role === "assistant") {
+          if (lastMsg && lastMsg.role === "workflow") {
             return prev.map((msg) =>
               msg.id === lastMsg.id
-                ? { ...msg, content: `Error: ${errorMessage}` }
+                ? {
+                    ...msg,
+                    content: `Error: ${errorMessage}`,
+                    isRunning: false,
+                    hasError: true,
+                  }
                 : msg
             );
           }
@@ -308,13 +351,35 @@ export const AIChatDialog = ({
         setIsLoading(false);
       }
     },
-    [action, executeFlow, resetFlow, aiConfig]
+    [action, executeFlow, resetFlow, flowId, messages]
   );
 
-  const handleSubmit = async (event: FormEvent) => {
+  const handleFormSubmit = async (event: FormEvent) => {
     event.preventDefault();
     const trimmedMessage = message.trim();
-    if (!trimmedMessage || isLoading) return;
+    if (!trimmedMessage || (isLoading && !waitingForExtension)) return;
+
+    // If waiting for extension, handle it differently
+    if (waitingForExtension) {
+      onSubmit?.(trimmedMessage);
+
+      const userMsg: ChatMessage = {
+        id: createId(),
+        role: "user",
+        content: trimmedMessage,
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, userMsg]);
+      setMessage("");
+      setWaitingForExtension(false);
+
+      try {
+        await extendFlow(trimmedMessage);
+      } catch (error) {
+        // Silently handle errors
+      }
+      return;
+    }
 
     onSubmit?.(trimmedMessage);
 
@@ -328,13 +393,9 @@ export const AIChatDialog = ({
     setMessages((prev) => [...prev, userMsg]);
     setMessage("");
 
-    // Execute based on mode
+    // Execute workflow
     try {
-      if (action) {
-        await handleWorkflowChat(trimmedMessage);
-      } else {
-        await handleRegularChat(trimmedMessage);
-      }
+      await handleSubmit(trimmedMessage);
     } catch (error) {
       // Silently handle errors
     }
@@ -344,160 +405,252 @@ export const AIChatDialog = ({
   useEffect(() => {
     if (flowStatus === "completed" || flowStatus === "error") {
       setIsLoading(false);
+      setWaitingForExtension(false);
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.role === "workflow" && msg.isRunning
+            ? { ...msg, isRunning: false }
+            : msg
+        )
+      );
+    } else if (flowStatus === "waiting-confirmation") {
+      setIsLoading(false);
     } else if (flowStatus === "running") {
-      setIsLoading(true);
+      if (!waitingForExtension) {
+        setIsLoading(true);
+      }
     }
-  }, [flowStatus]);
+  }, [flowStatus, waitingForExtension]);
 
-  // Helper function to get status badge class
-  const getStatusBadgeClass = () => {
-    switch (flowStatus) {
-      case "running":
-        return workflowStyles.workflowStatusBadgeRunning;
-      case "completed":
-        return workflowStyles.workflowStatusBadgeCompleted;
-      case "error":
-        return workflowStyles.workflowStatusBadgeError;
-      case "paused":
-        return workflowStyles.workflowStatusBadgePaused;
-      default:
-        return workflowStyles.workflowStatusBadgeIdle;
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
-  };
-
-  // Helper function to get step class
-  const getStepClass = (index: number, step: { executed: boolean }) => {
-    if (index === currentStep && isRunning) {
-      return `${workflowStyles.workflowStep} ${workflowStyles.workflowStepActive}`;
-    }
-    if (step.executed) {
-      return `${workflowStyles.workflowStep} ${workflowStyles.workflowStepCompleted}`;
-    }
-    return `${workflowStyles.workflowStep} ${workflowStyles.workflowStepPending}`;
-  };
-
-  // Helper function to get step dot class
-  const getStepDotClass = (index: number, step: { executed: boolean }) => {
-    if (index === currentStep && isRunning) {
-      return `${workflowStyles.workflowStepDot} ${workflowStyles.workflowStepDotActive}`;
-    }
-    if (step.executed) {
-      return `${workflowStyles.workflowStepDot} ${workflowStyles.workflowStepDotCompleted}`;
-    }
-    return `${workflowStyles.workflowStepDot} ${workflowStyles.workflowStepDotPending}`;
-  };
-
-  // Only show workflow status when there's an active workflow
-  const hasActiveWorkflow =
-    action &&
-    ((flowState?.steps && flowState.steps.length > 0) ||
-      flowStatus === "running" ||
-      flowStatus === "completed" ||
-      flowStatus === "error" ||
-      flowStatus === "paused");
+  }, [messages]);
 
   return (
     <div className={`${containerStyles.container} ${className}`}>
-      {/* Workflow Status Display - Only show when workflow is active */}
-      {hasActiveWorkflow && (
-        <div className={workflowStyles.workflowStatus}>
-          <div className={workflowStyles.workflowStatusInner}>
-            <div className={workflowStyles.workflowStepsContainer}>
-              {flowState && flowState.steps.length > 0 ? (
-                flowState.steps.map((step, index) => (
-                  <div key={step.nodeId} className={getStepClass(index, step)}>
-                    <div className={getStepDotClass(index, step)} />
-                    <span className={workflowStyles.workflowStepName}>
-                      {step.node.name}
-                    </span>
-                    {step.executed && (
-                      <span className={workflowStyles.workflowStepCheck}>✓</span>
-                    )}
-                  </div>
-                ))
-              ) : (
-                <div className={workflowStyles.workflowStatusLabel}>
-                  {flowStatus === "running"
-                    ? "Initializing..."
-                    : "Not started"}
-                </div>
-              )}
-            </div>
-            {flowStatus && flowStatus !== "idle" && (
-              <div className="shrink-0">
-                <span
-                  className={`${workflowStyles.workflowStatusBadge} ${getStatusBadgeClass()}`}
-                >
-                  {flowStatus}
-                </span>
-              </div>
-            )}
-          </div>
-          {flowError && (
-            <div className={workflowStyles.workflowError}>{flowError}</div>
-          )}
-        </div>
-      )}
-
       {/* Chat Messages */}
       {messages.length > 0 && (
         <div className={messageStyles.chatContainer}>
-          <div className={messageStyles.messagesContainer}>
-            {messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={`${messageStyles.messageWrapper} ${
-                  msg.role === "user"
-                    ? messageStyles.messageWrapperUser
-                    : messageStyles.messageWrapperAssistant
-                }`}
-              >
+          <div
+            ref={messagesContainerRef}
+            className={messageStyles.messagesContainer}
+          >
+            {messages.map((msg) => {
+              // Skip empty workflow messages (but always show error messages and running messages)
+              if (
+                msg.role === "workflow" &&
+                !msg.content?.trim() &&
+                !msg.isRunning &&
+                !msg.hasError
+              ) {
+                return null;
+              }
+
+              // Render workflow messages
+              if (msg.role === "workflow") {
+                // Unified workflow message structure - use CSS to show/hide parts
+                const hasContent = msg.content && msg.content.length > 0;
+                // Header always shows for workflow messages (except chat flow)
+                const showHeader = !msg.isChatFlow;
+                // Content shows when showResponse is true (defaults to true) and there's content or error
+                const showContent = (msg.showResponse !== false) && (hasContent || msg.hasError);
+                // Show typing only when: running, no content yet, no error
+                const showTyping = msg.isRunning && !hasContent && !msg.hasError && (msg.showResponse !== false);
+                const showButtons = msg.needsConfirmation;
+
+                return (
+                  <div
+                    key={msg.id}
+                    className={workflowStyles.workflowMessageWrapper}
+                  >
+                    <div className={workflowStyles.workflowMessageBubble}>
+                      {/* Header */}
+                      <div
+                        className={`${workflowStyles.workflowMessageHeader} ${
+                          !showHeader
+                            ? workflowStyles.workflowMessageHidden
+                            : ""
+                        }`}
+                      >
+                        <span
+                          className={`${workflowStyles.workflowMessageIcon} ${
+                            msg.hasError
+                              ? workflowStyles.workflowMessageIconError
+                              : msg.isRunning
+                              ? workflowStyles.workflowMessageIconRunning
+                              : workflowStyles.workflowMessageIconSuccess
+                          }`}
+                        >
+                          {msg.hasError ? "✕" : msg.isRunning ? "●" : "✔"}
+                        </span>
+                        <span className={workflowStyles.workflowMessageTitle}>
+                          {msg.nodeName || "Workflow Step"}
+                        </span>
+                      </div>
+
+                      {/* Content */}
+                      <div
+                        className={`${workflowStyles.workflowMessageContent} ${
+                          !showContent
+                            ? workflowStyles.workflowMessageHidden
+                            : ""
+                        }`}
+                      >
+                        {msg.hasError ? (
+                          <span>Error occurred</span>
+                        ) : hasContent ? (
+                          // If running, use TypingMessageBox for streaming effect
+                          // If completed, show static content
+                          msg.isRunning ? (
+                            <TypingMessageBox
+                              text={msg.content}
+                              speed={15}
+                              messageId={msg.id}
+                              showCursor={true}
+                            />
+                          ) : (
+                            <pre style={{ whiteSpace: "pre-wrap", margin: 0 }}>
+                              {msg.content}
+                            </pre>
+                          )
+                        ) : null}
+                      </div>
+
+                      {/* Typing Indicator */}
+                      <div
+                        className={`${workflowStyles.workflowMessageTyping} ${
+                          !showTyping
+                            ? workflowStyles.workflowMessageHidden
+                            : ""
+                        }`}
+                      >
+                        <span className={messageStyles.typingCursor}>|</span>
+                      </div>
+
+                      {/* Buttons */}
+                      <div
+                        className={`${workflowStyles.confirmationActions} ${
+                          !showButtons
+                            ? workflowStyles.workflowMessageHidden
+                            : ""
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            await confirmFlow();
+                            setMessages((prev) =>
+                              prev.map((m) =>
+                                m.id === msg.id
+                                  ? { ...m, needsConfirmation: false }
+                                  : m
+                              )
+                            );
+                          }}
+                          className={workflowStyles.confirmButton}
+                        >
+                          {t("confirm") || "Confirm"}
+                        </button>
+                        {msg.confirmationNodeId === "dialog-check" && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              setWaitingForExtension(true);
+                              setMessages((prev) =>
+                                prev.map((m) =>
+                                  m.id === msg.id
+                                    ? { ...m, needsConfirmation: false }
+                                    : m
+                                )
+                              );
+                            }}
+                            className={workflowStyles.extendButton}
+                          >
+                            {t("extend") || "Extend"}
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Timestamp */}
+                      <div className={workflowStyles.workflowMessageTimestamp}>
+                        {msg.timestamp.toLocaleTimeString()}
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
+              // Render user messages
+              return (
                 <div
-                  className={`${messageStyles.messageBubble} ${
+                  key={msg.id}
+                  className={`${messageStyles.messageWrapper} ${
                     msg.role === "user"
-                      ? messageStyles.messageBubbleUser
-                      : messageStyles.messageBubbleAssistant
+                      ? messageStyles.messageWrapperUser
+                      : messageStyles.messageWrapperAssistant
                   }`}
                 >
-                  <div className={messageStyles.messageContent}>
-                    {msg.content ||
-                      (isLoading && msg.role === "assistant" ? "..." : "")}
-                  </div>
-                  <div className={messageStyles.messageTimestamp}>
-                    {msg.timestamp.toLocaleTimeString()}
+                  <div
+                    className={`${messageStyles.messageBubble} ${
+                      msg.role === "user"
+                        ? messageStyles.messageBubbleUser
+                        : messageStyles.messageBubbleAssistant
+                    }`}
+                  >
+                    <div className={messageStyles.messageContent}>
+                      {msg.content.trim()}
+                    </div>
+                    <div className={messageStyles.messageTimestamp}>
+                      {msg.timestamp.toLocaleTimeString()}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
+            <div ref={messagesEndRef} />
           </div>
+        </div>
+      )}
+
+      {/* Extension Notice */}
+      {waitingForExtension && (
+        <div className={workflowStyles.extensionNotice}>
+          <span className={workflowStyles.extensionNoticeIcon}>💡</span>
+          <span className={workflowStyles.extensionNoticeText}>
+            {t("extensionNotice") ||
+              "Please type how you'd like to extend the dialog in the input below, then press Enter."}
+          </span>
         </div>
       )}
 
       {/* Input Form */}
-      <form onSubmit={handleSubmit} className={formStyles.inputForm}>
+      <form onSubmit={handleFormSubmit} className={formStyles.inputForm}>
         <div className={formStyles.inputFormInner}>
-          {action && (
-            <span className={formStyles.actionBadge}>{action}</span>
-          )}
           <input
             type="text"
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             placeholder={
-              placeholder ||
-              (action
-                ? `Enter input for ${action} workflow...`
-                : "Type your message...")
+              waitingForExtension
+                ? t("extensionInputPlaceholder") ||
+                  "Describe how you'd like to extend the dialog..."
+                : placeholder ||
+                  (action
+                    ? `Enter input for ${action} workflow...`
+                    : "Type your message...")
             }
-            disabled={isLoading}
+            disabled={isLoading && !waitingForExtension}
             className={formStyles.inputField}
           />
           <button
             type="submit"
-            disabled={!message.trim() || isLoading}
+            disabled={!message.trim() || (isLoading && !waitingForExtension)}
             className={formStyles.submitButton}
           >
-            {isLoading ? "..." : t("send") || "Send"}
+            {isLoading && !waitingForExtension ? "..." : t("send") || "Send"}
           </button>
         </div>
       </form>

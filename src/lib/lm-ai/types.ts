@@ -20,7 +20,8 @@ export type LLMNodeType =
   | 'extension-relationship-analysis'
   | 'extension-relationship-check'
   | 'vocabulary-detail'
-  | 'vocabulary-audio';
+  | 'vocabulary-audio'
+  | 'chat-response';
 
 export type LLMProvider = 'deepseek' | 'openai' | 'anthropic' | 'custom';
 
@@ -64,6 +65,7 @@ export interface LLMNodeConfig {
   systemPrompt?: string;
   userPromptTemplate?: string;
   responseFormat?: 'json' | 'text' | 'markdown';
+  showResponse?: boolean; // Whether to show the response in the dialog UI
 }
 
 /**
@@ -74,6 +76,7 @@ export interface BaseNode {
   name: string;
   description?: string;
   execute: (context: NodeContext) => Promise<NodeResult>;
+  showResponse?: boolean; // Whether to show the response in the dialog UI
 }
 
 /**
@@ -184,8 +187,8 @@ export interface FlowExecutionRequest {
  */
 export interface FlowControlRequest {
   sessionId: string;
-  action: 'pause' | 'resume' | 'confirm' | 'reject' | 'skip' | 'retry';
-  data?: unknown;
+  action: 'pause' | 'resume' | 'confirm' | 'reject' | 'skip' | 'retry' | 'extend';
+  data?: unknown; // For 'extend', this should contain user's extension input
 }
 
 export interface LLMAPIRequest {

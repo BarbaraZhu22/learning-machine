@@ -1,6 +1,10 @@
 /**
  * Next.js API Route for LLM calls
  * Keeps API keys secure on the server side using HTTP-only cookies
+ * 
+ * NOTE: This endpoint is currently UNUSED. All LLM calls are handled through
+ * the flow system via /api/flow/execute. This endpoint is kept for potential
+ * standalone LLM API calls outside of the flow system.
  */
 
 import { NextRequest, NextResponse } from 'next/server';

@@ -86,13 +86,15 @@ export function createLLMNode(
     nodeType: "llm",
     config,
     execute,
+    showResponse: config.showResponse,
   };
 }
 
 /**
- * Prepare messages for LLM API based on provider
+ * Prepare messages for LLM API call
+ * Exported for use in streaming execution
  */
-async function prepareMessages(
+export async function prepareMessages(
   input: unknown,
   userPromptTemplate?: string,
   systemPrompt?: string,
@@ -115,17 +117,59 @@ async function prepareMessages(
     const userLanguage = context?.userLanguage || "en";
     const learningLanguage = context?.learningLanguage || "english";
 
+    // Handle extension input (if input is an object with previousDialog and extensionRequest)
+    let previousDialogStr = "";
+    let extensionRequestStr = "";
+    if (typeof input === "object" && input !== null && !Array.isArray(input)) {
+      const inputObj = input as Record<string, unknown>;
+      if (inputObj.previousDialog) {
+        previousDialogStr =
+          typeof inputObj.previousDialog === "string"
+            ? inputObj.previousDialog
+            : JSON.stringify(inputObj.previousDialog, null, 2);
+      }
+      if (inputObj.extensionRequest) {
+        extensionRequestStr =
+          typeof inputObj.extensionRequest === "string"
+            ? inputObj.extensionRequest
+            : String(inputObj.extensionRequest);
+      }
+    }
+
     // Replace special instruction variables
     const dialogFormatInstructions = getDialogFormatInstructions(context);
     const validationInstructions = getDialogValidationInstructions(context);
 
-    return template
+    let result = template
       .replace(/\{\{input\}\}/g, inputStr)
       .replace(/\{\{previousOutput\}\}/g, previousOutputStr)
       .replace(/\{\{userLanguage\}\}/g, userLanguage)
       .replace(/\{\{learningLanguage\}\}/g, learningLanguage)
       .replace(/\{\{dialogFormatInstructions\}\}/g, dialogFormatInstructions)
       .replace(/\{\{validationInstructions\}\}/g, validationInstructions);
+
+    // Handle extension-specific variables
+    if (previousDialogStr) {
+      result = result.replace(/\{\{previousDialog\}\}/g, previousDialogStr);
+    }
+    if (extensionRequestStr) {
+      result = result.replace(/\{\{extensionRequest\}\}/g, extensionRequestStr);
+    }
+
+    // Handle simple conditional: {{#if previousDialog}}...{{else}}...{{/if}}
+    if (previousDialogStr) {
+      result = result.replace(
+        /\{\{#if previousDialog\}\}([\s\S]*?)\{\{else\}\}([\s\S]*?)\{\{\/if\}\}/g,
+        "$1"
+      );
+    } else {
+      result = result.replace(
+        /\{\{#if previousDialog\}\}([\s\S]*?)\{\{else\}\}([\s\S]*?)\{\{\/if\}\}/g,
+        "$2"
+      );
+    }
+
+    return result;
   };
 
   if (systemPrompt) {
@@ -155,6 +199,27 @@ async function prepareMessages(
   messages.push({ role: "user", content: userContent });
 
   return messages;
+}
+
+/**
+ * Parse LLM response based on format
+ * Exported for use in streaming execution
+ */
+export async function parseResponse(
+  response: unknown,
+  format?: string
+): Promise<unknown> {
+  if (typeof response !== "string") return response;
+
+  if (format === "json") {
+    try {
+      return JSON.parse(response);
+    } catch {
+      return { content: response };
+    }
+  }
+
+  return response;
 }
 
 /**
@@ -234,28 +299,9 @@ async function callLLMAPI(request: LLMAPIRequest): Promise<unknown> {
 
   // Extract content based on provider
   if (provider === "anthropic") {
-    return data.content?.[0]?.text || data.content?.[0]?.text || "";
+    return data.content?.[0]?.text || "";
   } else {
     return data.choices?.[0]?.message?.content || "";
   }
 }
 
-/**
- * Parse LLM response based on format
- */
-async function parseResponse(
-  response: unknown,
-  format?: string
-): Promise<unknown> {
-  if (typeof response !== "string") return response;
-
-  if (format === "json") {
-    try {
-      return JSON.parse(response);
-    } catch {
-      return { content: response };
-    }
-  }
-
-  return response;
-}

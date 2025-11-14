@@ -39,6 +39,7 @@ interface UseFlowControllerReturn {
   reject: () => Promise<void>;
   skip: () => Promise<void>;
   retry: () => Promise<void>;
+  extend: (data?: unknown) => Promise<void>;
   reset: () => void;
 }
 
@@ -226,7 +227,7 @@ export function useFlowController(
   );
 
   const controlFlow = useCallback(
-    async (action: 'pause' | 'resume' | 'confirm' | 'reject' | 'skip' | 'retry', data?: unknown) => {
+    async (action: 'pause' | 'resume' | 'confirm' | 'reject' | 'skip' | 'retry' | 'extend', data?: unknown) => {
       if (!sessionIdRef.current) {
         throw new Error('No active session');
       }
@@ -266,6 +267,7 @@ export function useFlowController(
   const reject = useCallback(() => controlFlow('reject'), [controlFlow]);
   const skip = useCallback(() => controlFlow('skip'), [controlFlow]);
   const retry = useCallback(() => controlFlow('retry'), [controlFlow]);
+  const extend = useCallback((data?: unknown) => controlFlow('extend', data), [controlFlow]);
 
   const reset = useCallback(() => {
     if (abortControllerRef.current) {
@@ -300,6 +302,7 @@ export function useFlowController(
     reject,
     skip,
     retry,
+    extend,
     reset,
   };
 }

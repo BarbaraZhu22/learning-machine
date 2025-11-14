@@ -24,12 +24,49 @@ export function getNodeName(
 }
 
 /**
+ * Checks if a node should show its response in the dialog
+ */
+export function shouldShowNodeResponse(
+  nodeId?: string,
+  state?: FlowState | null
+): boolean {
+  // If state is not available yet (e.g., during step-start), default to showing
+  if (!state?.steps) {
+    return true;
+  }
+  
+  if (nodeId) {
+    const step = state.steps.find((s) => s.nodeId === nodeId);
+    if (step && step.node) {
+      // Check if node has showResponse flag set
+      // Default to true for LLM nodes if not explicitly set to false
+      if (step.node.nodeType === 'llm') {
+        return step.node.showResponse !== false;
+      }
+      return step.node.showResponse === true;
+    }
+  }
+  // Default: show response for workflow messages (except chat flow)
+  // This ensures content is visible unless explicitly hidden
+  return true;
+}
+
+/**
  * Formats output value to string representation
  */
 export function formatOutput(output: unknown): string {
-  return typeof output === "string"
-    ? output
-    : JSON.stringify(output, null, 2);
+  if (output === null || output === undefined) {
+    return "";
+  }
+  if (typeof output === "string") {
+    return output;
+  }
+  // For objects/arrays, format as JSON with indentation for readability
+  try {
+    return JSON.stringify(output, null, 2);
+  } catch {
+    return String(output);
+  }
 }
 
 /**
@@ -64,12 +101,5 @@ export function extractFinalOutput(
   const finalOutput = state.context.previousOutput;
   if (!finalOutput) return null;
   return formatOutput(finalOutput);
-}
-
-/**
- * Checks if a message content indicates it's a step-start message
- */
-export function isStepStartMessage(content: string): boolean {
-  return content.includes("🔄");
 }
 

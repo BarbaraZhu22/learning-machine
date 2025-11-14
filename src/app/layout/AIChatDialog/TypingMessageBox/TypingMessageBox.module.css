@@ -1,0 +1,15 @@
+.typingCursor {
+  display: inline-block;
+  animation: blink-cursor 1s step-end infinite;
+  margin-left: 0.125rem;
+}
+
+@keyframes blink-cursor {
+  0%, 50% {
+    opacity: 1;
+  }
+  51%, 100% {
+    opacity: 0;
+  }
+}
+

@@ -9,7 +9,7 @@ import type {
   NodeContext,
 } from '@/lib/lm-ai/types';
 import { executeFlowStream } from '@/lib/lm-ai/server-flow';
-import { createSimulateDialogFlow, createExtendVocabularyFlow } from '@/lib/lm-ai/flow';
+import { createSimulateDialogFlow, createExtendVocabularyFlow, createSimpleChatFlow } from '@/lib/lm-ai/flow';
 
 const COOKIE_NAME = 'ai-api-key';
 
@@ -21,6 +21,10 @@ const flowRegistry: Record<string, () => FlowConfig> = {
   },
   'extend-vocabulary': () => {
     const flow = createExtendVocabularyFlow();
+    return flow.getState().config;
+  },
+  'chat': () => {
+    const flow = createSimpleChatFlow();
     return flow.getState().config;
   },
 };

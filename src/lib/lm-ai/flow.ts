@@ -370,8 +370,8 @@ export function createSimulateDialogFlow(
       ],
       targetStructure: {
         situation: '',
-        characterA: 'Character A',
-        characterB: 'Character B',
+        characterA: '',
+        characterB: '',
         notes: '',
       },
     }
@@ -392,6 +392,7 @@ export function createSimulateDialogFlow(
       userPromptTemplate:
         'Analyze this dialog scenario: {{input}}\n\nProvide analysis in JSON format with: number_of_characters, situation_description, and target_language.',
       responseFormat: 'json',
+      showResponse: true, // Show response in dialog
     },
     'Analyze dialog scenario to understand characters and situation'
   );
@@ -409,8 +410,9 @@ export function createSimulateDialogFlow(
       systemPrompt:
         'You are a language learning assistant. Generate natural dialog conversations based on the scenario and analysis.',
       userPromptTemplate:
-        'Based on the analysis: {{input}}\n\n{{dialogFormatInstructions}}\n\nGenerate a natural dialog conversation. The output MUST be in JSON format with:\n- "characters": ["characterAName", "characterBName"]\n- "dialog": [\n    {\n      "character": "characterAName",\n      "use_text": "...",\n      "learn_text": "..."\n    },\n    ...\n  ]\n\nMake the dialog natural, relevant to the situation, and appropriate for language learning.',
+        '{{#if previousDialog}}You are extending an existing dialog. Previous dialog:\n{{previousDialog}}\n\nUser extension request: {{extensionRequest}}\n\nPlease extend the dialog naturally, maintaining the same characters and style. Append new dialog entries to the existing ones. The output MUST be in JSON format with:\n- "characters": ["characterAName", "characterBName"]\n- "dialog": [\n    ...existing entries...,\n    {\n      "character": "characterAName",\n      "use_text": "...",\n      "learn_text": "..."\n    },\n    ...new entries...\n  ]\n{{else}}Based on the analysis: {{input}}\n\n{{dialogFormatInstructions}}\n\nGenerate a natural dialog conversation. The output MUST be in JSON format with:\n- "characters": ["characterAName", "characterBName"]\n- "dialog": [\n    {\n      "character": "characterAName",\n      "use_text": "...",\n      "learn_text": "..."\n    },\n    ...\n  ]\n\nMake the dialog natural, relevant to the situation, and appropriate for language learning.{{/if}}',
       responseFormat: 'json',
+      showResponse: true, // Show response in dialog
     },
     'Generate dialog conversation with both user and learning language'
   );
@@ -428,13 +430,13 @@ export function createSimulateDialogFlow(
       systemPrompt:
         'You are a language learning assistant. Validate dialog content for correctness, relevance, and quality.',
       userPromptTemplate:
-        'Validate this generated dialog against the original analysis.\n\nOriginal Analysis:\n{{previousOutput}}\n\nGenerated Dialog:\n{{input}}\n\n{{validationInstructions}}\n\nCheck if the dialog is:\n1. Valid (properly formatted with characters and dialog array)\n2. Relevant to the original scenario and analysis\n3. Appropriate for language learning\n4. Natural and coherent\n\nReturn JSON with:\n- "is_valid": true/false\n- "reasons": ["reason1", "reason2", ...] if not valid',
+        'Validate this generated dialog against the original analysis.\n\nOriginal Analysis:\n{{previousOutput}}\n\nGenerated Dialog:\n{{input}}\n\n{{validationInstructions}}\n\nCheck if the dialog is:\n1. Valid (properly formatted with characters and dialog array)\n2. Relevant to the original scenario and analysis\n3. Appropriate for language learning\n4. Natural and coherent\n\nReturn JSON with:\n- "is_valid": true/false if not valid',
       responseFormat: 'json',
     },
     'Validate generated dialog correctness and relevance'
   );
 
-  // LLM node: Dialog Audio (preparation)
+  // LLM node: Dialog Audio Generation
   const dialogAudio = createLLMNode(
     'dialog-audio',
     'Dialog Audio',
@@ -445,11 +447,12 @@ export function createSimulateDialogFlow(
       apiUrl: llmConfig?.apiUrl,
       model: llmConfig?.model,
       systemPrompt:
-        'You are a language learning assistant. Prepare dialog content for audio generation.',
-      userPromptTemplate: 'Prepare this dialog for audio generation: {{input}}',
+        'You are a language learning assistant. Generate audio specifications for dialog content. Extract only the learn_text (learning language text) from each dialog entry and prepare it for audio generation with character-appropriate voices.',
+      userPromptTemplate:
+        'Generate audio specifications for this validated dialog:\n\n{{input}}\n\nExtract ONLY the "learn_text" field from each dialog entry (ignore "use_text"). For each learn_text sentence:\n1. Assign a unique segment ID (e.g., "segment-0", "segment-1")\n2. Identify which character said it\n3. Suggest appropriate voice characteristics for that character (gender, age, tone, etc.)\n4. Keep the original sentence index from the dialog array for easy matching\n\nReturn JSON format:\n{\n  "audio_segments": [\n    {\n      "id": "segment-0",\n      "dialog_index": 0,\n      "character": "characterAName",\n      "learn_text": "...",\n      "voice_suggestion": {\n        "gender": "male/female/neutral",\n        "age_range": "young/adult/elderly",\n        "tone": "friendly/formal/casual/etc",\n        "description": "brief voice description"\n      }\n    },\n    ...\n  ],\n  "characters": {\n    "characterAName": {\n      "voice_id": "voice-1",\n      "voice_description": "..."\n    },\n    "characterBName": {\n      "voice_id": "voice-2",\n      "voice_description": "..."\n    }\n  }\n}\n\nMake sure each character has a distinct voice suggestion, and each segment has a clear ID that matches its position in the dialog.',
       responseFormat: 'json',
     },
-    'Prepare dialog for audio generation'
+    'Generate audio specifications for dialog with character-specific voices'
   );
 
   const flow = builder
@@ -458,6 +461,8 @@ export function createSimulateDialogFlow(
     .addNode(dialogGeneration)
     .addNode(dialogCheck)
     .addNode(dialogAudio)
+    // Note: dialog-check validation is now handled in server-flow.ts
+    // Condition is kept for backward compatibility but logic is in server-flow
     .addCondition({
       nodeId: 'dialog-check',
       condition: (result) => {
@@ -471,14 +476,17 @@ export function createSimulateDialogFlow(
         );
       },
       onTrue: 'dialog-audio',
-      onFalse: 'dialog-generation', // Go back to generation if check fails
+      onFalse: 'dialog-generation', // Go back to generation if check fails (handled in server-flow)
     })
     .build();
 
   // Apply options
   const state = flow.getState();
+  // Set dialog-check as confirmation node by default if not specified
   if (options?.confirmationNodes) {
     state.config.confirmationNodes = options.confirmationNodes;
+  } else {
+    state.config.confirmationNodes = ['dialog-check'];
   }
   if (options?.continueOnFailure !== undefined) {
     state.config.continueOnFailure = options.continueOnFailure;
@@ -618,6 +626,47 @@ export function createExtendVocabularyFlow(
   if (options?.continueOnFailure !== undefined) {
     state.config.continueOnFailure = options.continueOnFailure;
   }
+
+  return flow;
+}
+
+/**
+ * Flow 3: Simple Chat (Regular Chat)
+ * Single LLM node for regular chat conversations
+ * showResponse: false so header is not shown
+ */
+export function createSimpleChatFlow(
+  llmConfig?: {
+    provider?: 'deepseek' | 'openai' | 'anthropic' | 'custom';
+    apiKey?: string;
+    apiUrl?: string;
+    model?: string;
+  }
+): Flow {
+  const builder = new FlowBuilder('chat', 'Simple Chat')
+    .setDescription('Regular chat conversation');
+
+  // Single LLM node for chat
+  const chatNode = createLLMNode(
+    'chat-response',
+    'Chat Response',
+    {
+      type: 'chat-response',
+      provider: llmConfig?.provider || 'deepseek',
+      apiKey: llmConfig?.apiKey,
+      apiUrl: llmConfig?.apiUrl,
+      model: llmConfig?.model,
+      systemPrompt: 'You are a helpful assistant.',
+      userPromptTemplate: '{{input}}',
+      responseFormat: 'text',
+      showResponse: false, // Don't show workflow header for regular chat
+    },
+    'Respond to user messages in a conversational way'
+  );
+
+  const flow = builder
+    .addNode(chatNode)
+    .build();
 
   return flow;
 }

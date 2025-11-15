@@ -64,7 +64,6 @@ export const DialogDisplay = ({
   dialogRecord,
   onClose,
 }: DialogDisplayProps) => {
-  console.log(dialogRecord);
   const { t } = useTranslation();
   const learningLanguage = useAppStore((state) => state.learningLanguage);
   const aiConfig = useAppStore((state) => state.aiConfig);
@@ -72,7 +71,7 @@ export const DialogDisplay = ({
   // Audio state
   const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
   const [audioData, setAudioData] = useState<
-    Array<{ sentenceIndex: number; audioUrl: string; voiceSuggestion?: string }>
+    Array<{ sentenceIndex: number; audioUrl: string; character?: string }>
   >([]);
   const [currentlyReadingIndex, setCurrentlyReadingIndex] = useState<
     number | null
@@ -160,28 +159,24 @@ export const DialogDisplay = ({
   }, []);
 
   // Generate audio
-  const handleGenerateAudio = async (): Promise<Array<{
-    sentenceIndex: number;
-    audioUrl: string;
-  }> | null> => {
+  const handleGenerateAudio = async (): Promise<
+    Array<{ sentenceIndex: number; audioUrl: string; character?: string }>
+    | null
+  > => {
     if (!dialogData || isGeneratingAudio) return null;
 
     setIsGeneratingAudio(true);
     try {
-      const sentences = dialogData.dialog.map((entry) => ({
-        text: entry.learn_text,
-        character: entry.character,
-        voiceSuggestion: voiceSuggestions?.[entry.character],
-      }));
-
       const response = await fetch("/api/audio/generate", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          sentences,
+          dialogContent: dialogData,
+          voiceSuggestions,
           learningLanguage,
+          ssmlConfig: dialogRecord?.ssmlConfig, // Pass existing SSML config if available
           aiProvider: aiConfig?.provider, // Pass user's AI config provider
         }),
       });
@@ -193,6 +188,22 @@ export const DialogDisplay = ({
 
       const result = await response.json();
       setAudioData(result.audioData);
+
+      // If SSML config was generated, save it to the dialog record
+      if (result.ssmlConfig && dialogRecord) {
+        try {
+          const { indexedDbClient } = await import("@/lib/indexedDb");
+          const updated: DialogRecord = {
+            ...dialogRecord,
+            ssmlConfig: result.ssmlConfig,
+            updatedAt: new Date().toISOString(),
+          };
+          await indexedDbClient.saveDialog(updated);
+        } catch (error) {
+          console.error("Failed to save SSML config:", error);
+        }
+      }
+
       return result.audioData;
     } catch (error) {
       console.error("Failed to generate audio:", error);
@@ -251,7 +262,8 @@ export const DialogDisplay = ({
           await playBrowserTTS(
             entry.learn_text,
             learningLanguage,
-            entry.character
+            entry.character,
+            currentIndex
           );
           currentIndex++;
           playNext();
@@ -331,7 +343,8 @@ export const DialogDisplay = ({
   const playBrowserTTS = (
     text: string,
     language?: string,
-    characterName?: string
+    characterName?: string,
+    sentenceIndex?: number
   ): Promise<void> => {
     return new Promise((resolve, reject) => {
       if (typeof window === "undefined" || !window.speechSynthesis) {
@@ -347,15 +360,41 @@ export const DialogDisplay = ({
       // Get available voices
       const voices = window.speechSynthesis.getVoices();
 
-      // Use SSML config if available, otherwise fallback to voice suggestion parsing
-      if (characterName) {
-        // Use AI-generated SSML config
+      // Use SSML config if available (new format with per-sentence config)
+      if (characterName && ssmlConfig?.characters?.[characterName]) {
+        const characterConfig = ssmlConfig.characters[characterName];
+        const sentenceConfig = sentenceIndex !== undefined 
+          ? ssmlConfig.sentences?.find(s => s.index === sentenceIndex && s.character === characterName)
+          : undefined;
+
+        // Build SSML config from character base + sentence-specific prosody
         const config: SSMLConfig = {
           voice: {
+            ...characterConfig.voice,
             language,
           },
+          prosody: sentenceConfig?.prosody,
+          emphasis: sentenceConfig?.emphasis,
+          break: sentenceConfig?.break
+            ? {
+                ...sentenceConfig.break,
+                time:
+                  typeof sentenceConfig.break.time === 'number'
+                    ? sentenceConfig.break.time
+                    : sentenceConfig.break.time,
+              }
+            : undefined,
         };
         applySSMLToUtterance(utterance, config, voices);
+
+        // Apply break time after sentence
+        if (sentenceConfig?.break?.time) {
+          utterance.onend = () => {
+            setTimeout(() => resolve(), sentenceConfig.break!.time!);
+          };
+        } else {
+          utterance.onend = () => resolve();
+        }
       } else {
         // Fallback to parsing voice suggestion (legacy)
         const voiceSuggestion = characterName
@@ -367,9 +406,9 @@ export const DialogDisplay = ({
           language,
           voices
         );
+        utterance.onend = () => resolve();
       }
 
-      utterance.onend = () => resolve();
       utterance.onerror = (error) => reject(error);
 
       window.speechSynthesis.speak(utterance);
@@ -402,10 +441,11 @@ export const DialogDisplay = ({
     if (isBrowserTTS) {
       // Extract text from browser-tts marker
       const text = sentenceAudios[0].audioUrl.replace("browser-tts:", "");
-      const characterName = dialogData!.dialog[index].character;
+      const entry = dialogData!.dialog[index];
+      const characterName = entry.character;
 
       try {
-        await playBrowserTTS(text, learningLanguage, characterName);
+        await playBrowserTTS(text, learningLanguage, characterName, index);
         setCurrentlyReadingIndex(null);
       } catch (error) {
         console.error("Failed to play browser TTS:", error);

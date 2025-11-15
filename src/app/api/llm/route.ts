@@ -89,7 +89,7 @@ function getApiKeyForProvider(provider: LLMProvider): string | undefined {
 /**
  * Call LLM API with provider-specific handling
  */
-async function callLLMAPI(
+export async function callLLMAPI(
   request: LLMAPIRequest
 ): Promise<unknown> {
   const { provider, apiKey, apiUrl, model, messages, temperature, maxTokens, responseFormat } = request;

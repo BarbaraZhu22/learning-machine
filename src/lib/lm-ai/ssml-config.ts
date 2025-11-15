@@ -18,7 +18,7 @@ export interface SSMLConfig {
   };
   emphasis?: 'strong' | 'moderate' | 'reduced';
   break?: {
-    time?: string; // e.g., "500ms"
+    time?: number | string; // milliseconds (number) or string like "500ms"
     strength?: 'none' | 'x-weak' | 'weak' | 'medium' | 'strong' | 'x-strong';
   };
 }

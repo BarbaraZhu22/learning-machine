@@ -1,5 +1,5 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import { NoteRecord, VocabularyEntry } from '@/types';
+import { NoteRecord, VocabularyEntry, DialogRecord } from '@/types';
 import { defaultLearningLanguage } from '@/data/learningLanguages';
 
 interface LearningMachineDB extends DBSchema {
@@ -11,10 +11,14 @@ interface LearningMachineDB extends DBSchema {
     key: string;
     value: VocabularyEntry;
   };
+  dialogs: {
+    key: string;
+    value: DialogRecord;
+  };
 }
 
 const DB_NAME = 'learning-machine';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 let dbPromise: Promise<IDBPDatabase<LearningMachineDB>> | null = null;
 
@@ -27,6 +31,9 @@ const getDb = () => {
         }
         if (!db.objectStoreNames.contains('vocabulary')) {
           db.createObjectStore('vocabulary', { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains('dialogs')) {
+          db.createObjectStore('dialogs', { keyPath: 'id' });
         }
 
         if (oldVersion < 2) {
@@ -94,6 +101,25 @@ export const indexedDbClient = {
   async deleteVocabulary(id: string): Promise<void> {
     const db = await getDb();
     await db.delete('vocabulary', id);
+  },
+
+  async getAllDialogs(): Promise<DialogRecord[]> {
+    const db = await getDb();
+    const dialogs = await db.getAll('dialogs');
+    return dialogs.map((dialog) => ({
+      ...dialog,
+      learningLanguage: dialog.learningLanguage ?? defaultLearningLanguage,
+    }));
+  },
+
+  async saveDialog(dialog: DialogRecord): Promise<void> {
+    const db = await getDb();
+    await db.put('dialogs', dialog);
+  },
+
+  async deleteDialog(id: string): Promise<void> {
+    const db = await getDb();
+    await db.delete('dialogs', id);
   },
 };
 

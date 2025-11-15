@@ -88,6 +88,24 @@ export interface DialogScenario {
   createdAt: string;
 }
 
+export interface DialogRecord {
+  id: string; // Format: diagxxx-sessionxxx
+  sessionId?: string;
+  name?: string; // Optional custom name for the dialog
+  dialogContent: {
+    characters: string[];
+    dialog: Array<{
+      character: string;
+      use_text: string;
+      learn_text: string;
+    }>;
+  };
+  voiceSuggestions?: Record<string, string>; // character -> voice description
+  learningLanguage: LearningLanguageCode;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type LLMProvider = 'deepseek' | 'openai' | 'anthropic' | 'custom';
 
 export interface AIConfig {

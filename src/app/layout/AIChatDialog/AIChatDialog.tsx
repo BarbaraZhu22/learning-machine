@@ -473,10 +473,13 @@ export const AIChatDialog = ({
     }
   }, [flowStatus, flowState, action, onComplete]);
 
-  // Auto-scroll to bottom when messages change
+  // Auto-scroll to bottom when messages change (only scroll message container, not page)
   useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    if (messagesEndRef.current && messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTo({
+        top: messagesContainerRef.current.scrollHeight,
+        behavior: "smooth",
+      });
     }
   }, [messages]);
 
@@ -543,7 +546,7 @@ export const AIChatDialog = ({
                           {msg.hasError ? "✕" : msg.isRunning ? "●" : "✔"}
                         </span>
                         <span className={workflowStyles.workflowMessageTitle}>
-                          {msg.nodeName || "Workflow Step"}
+                          {msg.nodeName || t("workflowStep")}
                         </span>
                       </div>
 
@@ -556,7 +559,7 @@ export const AIChatDialog = ({
                         }`}
                       >
                         {msg.hasError ? (
-                          <span>Error occurred</span>
+                          <span>{t("errorOccurred")}</span>
                         ) : hasContent ? (
                           // If running, use TypingMessageBox for streaming effect
                           // If completed, show static content
@@ -608,35 +611,45 @@ export const AIChatDialog = ({
                           }}
                           className={workflowStyles.confirmButton}
                         >
-                          {t("confirm") || "Confirm"}
+                          {t("confirm")}
                         </button>
                         {/* Show restart/extend button if operation exists */}
                         {msg.operations?.some(
                           (op) => op.action === "restart"
                         ) &&
-                          !extendingMessageId && (
-                            <button
-                              type="button"
-                              onClick={async () => {
-                                setExtendingMessageId(msg.id);
-                                setWaitingForExtension(true);
-                                setMessages((prev) =>
-                                  prev.map((m) =>
-                                    m.id === msg.id
-                                      ? { ...m, needsOperation: false }
-                                      : m
-                                  )
-                                );
-                              }}
-                              className={workflowStyles.extendButton}
-                            >
-                              {msg.operations?.find(
-                                (op) => op.action === "restart"
-                              )?.label ||
-                                t("extend") ||
-                                "Extend"}
-                            </button>
-                          )}
+                          !extendingMessageId &&
+                          (() => {
+                            const restartOp = msg.operations?.find(
+                              (op) => op.action === "restart"
+                            );
+                            // Only show if operation exists
+                            if (!restartOp) return null;
+
+                            // Use t(label) if label exists, otherwise use label, otherwise use action id, otherwise use "extend"
+                            const buttonLabel = restartOp.label
+                              ? (t(restartOp.label) || restartOp.label)
+                              : (restartOp.action || t("extend"));
+
+                            return (
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  setExtendingMessageId(msg.id);
+                                  setWaitingForExtension(true);
+                                  setMessages((prev) =>
+                                    prev.map((m) =>
+                                      m.id === msg.id
+                                        ? { ...m, needsOperation: false }
+                                        : m
+                                    )
+                                  );
+                                }}
+                                className={workflowStyles.extendButton}
+                              >
+                                {buttonLabel}
+                              </button>
+                            );
+                          })()}
                       </div>
 
                       {/* Extension Input - shown when this message is being extended */}
@@ -647,10 +660,9 @@ export const AIChatDialog = ({
                             value={extensionInput}
                             onChange={(e) => setExtensionInput(e.target.value)}
                             placeholder={
-                              t("extensionInputPlaceholder") ||
                               msg.operationNodeId === "dialog-check"
-                                ? "Describe how you'd like to extend the dialog..."
-                                : "Enter your input..."
+                                ? t("extendDialogPlaceholder")
+                                : t("extensionInputPlaceholder")
                             }
                             className={workflowStyles.extensionInput}
                             onKeyDown={async (e) => {
@@ -718,7 +730,7 @@ export const AIChatDialog = ({
                             className={workflowStyles.extensionSendButton}
                             disabled={!extensionInput.trim()}
                           >
-                            {t("send") || "Send"}
+                            {t("send")}
                           </button>
                           <button
                             type="button"
@@ -729,7 +741,7 @@ export const AIChatDialog = ({
                             }}
                             className={workflowStyles.extensionCancelButton}
                           >
-                            {t("cancel") || "Cancel"}
+                            {t("cancel")}
                           </button>
                         </div>
                       )}
@@ -785,8 +797,8 @@ export const AIChatDialog = ({
             placeholder={
               placeholder ||
               (action
-                ? `Enter input for ${action} workflow...`
-                : "Type your message...")
+                ? t("enterWorkflowInput").replace("{action}", action)
+                : t("typeMessage"))
             }
             disabled={isLoading || waitingForExtension}
             className={formStyles.inputField}
@@ -796,7 +808,7 @@ export const AIChatDialog = ({
             disabled={!message.trim() || (isLoading && !waitingForExtension)}
             className={formStyles.submitButton}
           >
-            {isLoading && !waitingForExtension ? "..." : t("send") || "Send"}
+            {isLoading && !waitingForExtension ? "..." : t("send")}
           </button>
         </div>
       </form>

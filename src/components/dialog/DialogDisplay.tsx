@@ -72,9 +72,7 @@ export const DialogDisplay = ({
   if (!dialogData) {
     return (
       <div className="rounded-lg border border-surface-200/50 bg-[color:var(--glass-base)] p-4 shadow-lg shadow-primary-100/40 backdrop-blur dark:border-surface-700 dark:bg-surface-900">
-        <p className="text-sm text-muted-foreground">
-          {t("noDialogs")}
-        </p>
+        <p className="text-sm text-muted-foreground">{t("noDialogs")}</p>
       </div>
     );
   }
@@ -122,7 +120,9 @@ export const DialogDisplay = ({
         </h3>
       )}
       <div
-        className={`space-y-4 ${isFullPage ? "flex-1 overflow-y-auto p-4 sm:p-6" : ""}`}
+        className={`space-y-4 ${
+          isFullPage ? "flex-1 overflow-y-auto p-4 sm:p-6" : ""
+        }`}
       >
         {dialog.map((entry, index) => {
           const position = characterPositions[entry.character] || "left";
@@ -140,14 +140,16 @@ export const DialogDisplay = ({
                     : "bg-surface-200 dark:bg-surface-700"
                 }`}
               >
-                <div className="mb-1 text-xs font-semibold text-muted-foreground">
+                <div
+                  className={`mb-1 text-xs font-semibold text-muted-foreground flex ${
+                    isLeft ? "justify-start" : "justify-end"
+                  }`}
+                >
                   {entry.character}
                 </div>
                 <div className="space-y-1">
                   <div className="text-sm break-words">
-                    <span className="font-medium text-primary-600 dark:text-primary-400">
-                      {t("learn")}:{" "}
-                    </span>
+                    <span className="font-medium text-primary-600 dark:text-primary-400"></span>
                     <TypingMessageBox
                       text={entry.learn_text}
                       messageId={`dialog-${index}-learn`}
@@ -156,7 +158,6 @@ export const DialogDisplay = ({
                     />
                   </div>
                   <div className="text-sm text-muted-foreground break-words">
-                    <span className="font-medium">{t("use")}: </span>
                     <TypingMessageBox
                       text={entry.use_text}
                       messageId={`dialog-${index}-use`}
@@ -173,4 +174,3 @@ export const DialogDisplay = ({
     </div>
   );
 };
-

@@ -13,7 +13,7 @@ import {
   extractFinalOutput,
   shouldShowNodeResponse,
 } from "./utils";
-import { TypingMessageBox } from "./TypingMessageBox";
+import { TypingMessageBox } from "@/components/common";
 import containerStyles from "./css/index.module.css";
 import workflowStyles from "./css/workflow.module.css";
 import messageStyles from "./css/messages.module.css";
@@ -24,6 +24,11 @@ export interface AIChatDialogProps {
   placeholder?: string;
   onSubmit?: (message: string) => void;
   onResponse?: (response: string) => void;
+  onComplete?: (data: {
+    action: string;
+    success: boolean;
+    state: FlowState;
+  }) => void;
   className?: string;
 }
 
@@ -47,6 +52,7 @@ export const AIChatDialog = ({
   placeholder,
   onSubmit,
   onResponse,
+  onComplete,
   className = "",
 }: AIChatDialogProps) => {
   const { t } = useTranslation();
@@ -55,6 +61,7 @@ export const AIChatDialog = ({
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const completedRef = useRef(false);
 
   // Extension state
   const [waitingForExtension, setWaitingForExtension] = useState(false);
@@ -258,7 +265,7 @@ export const AIChatDialog = ({
           if (lastWorkflowMsg) {
             return prev.map((m) =>
               m.id === lastWorkflowMsg.id
-                  ? {
+                ? {
                     ...m,
                     needsOperation: true,
                     operationNodeId: event.nodeId || "",
@@ -280,6 +287,8 @@ export const AIChatDialog = ({
             if (outputStr) {
               onResponse?.(outputStr);
             }
+            // Mark as completed - will be handled in useEffect
+            completedRef.current = true;
           }
         }
         setMessages((prev) =>
@@ -301,6 +310,8 @@ export const AIChatDialog = ({
           if (outputStr) {
             onResponse?.(outputStr);
           }
+          // Mark as completed - will be handled in useEffect
+          completedRef.current = true;
         }
       } else if (state.status === "waiting-operation") {
         if (!waitingForExtension) {
@@ -386,9 +397,7 @@ export const AIChatDialog = ({
       setWaitingForExtension(false);
 
       // Find restart operation from current message
-      const currentMsg = messages.find(
-        (m) => m.needsOperation && m.operations
-      );
+      const currentMsg = messages.find((m) => m.needsOperation && m.operations);
       const restartOp = currentMsg?.operations?.find(
         (op) => op.action === "restart"
       );
@@ -442,6 +451,27 @@ export const AIChatDialog = ({
       }
     }
   }, [flowStatus, waitingForExtension]);
+
+  // Handle completion callback after render
+  useEffect(() => {
+    if (
+      completedRef.current &&
+      flowStatus === "completed" &&
+      flowState &&
+      action &&
+      onComplete
+    ) {
+      completedRef.current = false; // Reset to prevent multiple calls
+      // Use setTimeout to ensure this runs after render
+      setTimeout(() => {
+        onComplete({
+          action,
+          success: true,
+          state: flowState,
+        });
+      }, 0);
+    }
+  }, [flowStatus, flowState, action, onComplete]);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {

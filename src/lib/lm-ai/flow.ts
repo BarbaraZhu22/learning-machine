@@ -518,12 +518,12 @@ export function createSimulateDialogFlow(
       apiUrl: llmConfig?.apiUrl,
       model: llmConfig?.model,
       systemPrompt:
-        "You are a language learning assistant. Generate audio specifications for dialog content. Extract only the learn_text (learning language text) from each dialog entry and prepare it for audio generation with character-appropriate voices.",
+        "You are a language learning assistant. Analyze dialog content and generate character voice analysis. Read the learn_text (learning language text) from the dialog and suggest appropriate voices for each character.",
       userPromptTemplate:
-        'Generate audio specifications for this validated dialog:\n\n{{input}}\n\nExtract ONLY the "learn_text" field from each dialog entry (ignore "use_text"). For each learn_text sentence:\n1. Assign a unique segment ID (e.g., "segment-0", "segment-1")\n2. Identify which character said it\n3. Suggest appropriate voice characteristics for that character (gender, age, tone, etc.)\n4. Keep the original sentence index from the dialog array for easy matching\n\nReturn JSON format:\n{\n  "audio_segments": [\n    {\n      "id": "segment-0",\n      "dialog_index": 0,\n      "character": "characterAName",\n      "learn_text": "...",\n      "voice_suggestion": {\n        "gender": "male/female/neutral",\n        "age_range": "young/adult/elderly",\n        "tone": "friendly/formal/casual/etc",\n        "description": "brief voice description"\n      }\n    },\n    ...\n  ],\n  "characters": {\n    "characterAName": {\n      "voice_id": "voice-1",\n      "voice_description": "..."\n    },\n    "characterBName": {\n      "voice_id": "voice-2",\n      "voice_description": "..."\n    }\n  }\n}\n\nMake sure each character has a distinct voice suggestion, and each segment has a clear ID that matches its position in the dialog.',
+        'Analyze this validated dialog and generate character voice analysis:\n\n{{input}}\n\nRead the dialog and extract the characters. For each character, suggest an appropriate voice description.\n\nReturn JSON format:\n{\n  "characterAName": "voice description for character A",\n  "characterBName": "voice description for character B"\n}\n\nMake sure each character has a distinct voice description.',
       responseFormat: "json",
     },
-    "Generate audio specifications for dialog with character-specific voices"
+    "Generate character voice analysis for dialog"
   );
 
   const flow = builder

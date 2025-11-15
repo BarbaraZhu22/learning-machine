@@ -1,14 +1,10 @@
 /**
  * Flow system for learning language agent
  * Supports composable flows with conditional routing
- * 
+ *
  * Note: All flow execution happens server-side via API routes.
  * Client uses useFlowController hook to interact with flows.
- * 
- * Environment variables (add to .env.local):
- * - DEEPSEEK_API_KEY (default provider)
- * - OPENAI_API_KEY (optional)
- * - ANTHROPIC_API_KEY (optional)
+ *
  */
 
 import type {
@@ -19,9 +15,11 @@ import type {
   FlowCondition,
   FlowConfig,
   FlowState,
-} from './types';
-import { createPreNode } from './pre-node';
-import { createLLMNode } from './llm-node';
+  FlowStatus,
+  BackNodeHandlerResult,
+} from "./types";
+import { createPreNode } from "./pre-node";
+import { createLLMNode } from "./llm-node";
 
 export class Flow {
   private state: FlowState;
@@ -37,7 +35,7 @@ export class Flow {
       config,
       currentStepIndex: 0,
       steps,
-      status: 'idle',
+      status: "idle",
       context: initialContext,
     };
   }
@@ -53,20 +51,20 @@ export class Flow {
    * Execute the flow
    */
   async execute(): Promise<FlowState> {
-    if (this.state.status === 'running') {
-      throw new Error('Flow is already running');
+    if (this.state.status === "running") {
+      throw new Error("Flow is already running");
     }
 
-    this.state.status = 'running';
+    this.state.status = "running";
     this.state.error = undefined;
 
     try {
       while (this.state.currentStepIndex < this.state.steps.length) {
         const step = this.state.steps[this.state.currentStepIndex];
-        
+
         // Execute current node
         const result = await step.node.execute(this.state.context);
-        
+
         step.result = result;
         step.executed = true;
         step.timestamp = Date.now();
@@ -87,24 +85,24 @@ export class Flow {
               continue;
             }
           }
-          
-          this.state.status = 'error';
-          this.state.error = result.error || 'Node execution failed';
+
+          this.state.status = "error";
+          this.state.error = result.error || "Node execution failed";
           break;
         }
 
         // Determine next node
         const nextNodeId = this.getNextNodeId(step.nodeId, result);
-        
+
         if (nextNodeId === null) {
           // Flow completed
-          this.state.status = 'completed';
+          this.state.status = "completed";
           break;
         }
 
         const nextIndex = this.findNodeIndex(nextNodeId);
         if (nextIndex === -1) {
-          this.state.status = 'error';
+          this.state.status = "error";
           this.state.error = `Next node not found: ${nextNodeId}`;
           break;
         }
@@ -112,12 +110,13 @@ export class Flow {
         this.state.currentStepIndex = nextIndex;
       }
 
-      if (this.state.status === 'running') {
-        this.state.status = 'completed';
+      if (this.state.status === "running") {
+        this.state.status = "completed";
       }
     } catch (error) {
-      this.state.status = 'error';
-      this.state.error = error instanceof Error ? error.message : 'Unknown error';
+      this.state.status = "error";
+      this.state.error =
+        error instanceof Error ? error.message : "Unknown error";
     }
 
     return this.getState();
@@ -128,7 +127,7 @@ export class Flow {
    */
   async executeNext(): Promise<NodeResult | null> {
     if (this.state.currentStepIndex >= this.state.steps.length) {
-      this.state.status = 'completed';
+      this.state.status = "completed";
       return null;
     }
 
@@ -143,15 +142,15 @@ export class Flow {
     this.state.context.input = result.output;
 
     if (!result.success) {
-      this.state.status = 'error';
-      this.state.error = result.error || 'Node execution failed';
+      this.state.status = "error";
+      this.state.error = result.error || "Node execution failed";
       return result;
     }
 
     this.state.currentStepIndex++;
-    
+
     if (this.state.currentStepIndex >= this.state.steps.length) {
-      this.state.status = 'completed';
+      this.state.status = "completed";
     }
 
     return result;
@@ -161,8 +160,8 @@ export class Flow {
    * Pause the flow
    */
   pause(): void {
-    if (this.state.status === 'running') {
-      this.state.status = 'paused';
+    if (this.state.status === "running") {
+      this.state.status = "paused";
     }
   }
 
@@ -170,8 +169,8 @@ export class Flow {
    * Resume the flow
    */
   resume(): void {
-    if (this.state.status === 'paused') {
-      this.state.status = 'running';
+    if (this.state.status === "paused") {
+      this.state.status = "running";
     }
   }
 
@@ -185,7 +184,7 @@ export class Flow {
       step.timestamp = undefined;
     });
     this.state.currentStepIndex = 0;
-    this.state.status = 'idle';
+    this.state.status = "idle";
     this.state.error = undefined;
     if (context) {
       this.state.context = context;
@@ -197,6 +196,29 @@ export class Flow {
    */
   updateContext(updates: Partial<NodeContext>): void {
     this.state.context = { ...this.state.context, ...updates };
+  }
+
+  /**
+   * Update current step index
+   */
+  setCurrentStepIndex(index: number): void {
+    if (index >= 0 && index < this.state.steps.length) {
+      this.state.currentStepIndex = index;
+    }
+  }
+
+  /**
+   * Update status
+   */
+  setStatus(status: FlowStatus): void {
+    this.state.status = status;
+  }
+
+  /**
+   * Set error
+   */
+  setError(error: string | undefined): void {
+    this.state.error = error;
   }
 
   /**
@@ -318,7 +340,7 @@ export class FlowBuilder {
 
   build(): Flow {
     if (!this.config.id || !this.config.name) {
-      throw new Error('Flow ID and name are required');
+      throw new Error("Flow ID and name are required");
     }
 
     const config: FlowConfig = {
@@ -344,115 +366,164 @@ export class FlowBuilder {
  */
 export function createSimulateDialogFlow(
   llmConfig?: {
-    provider?: 'deepseek' | 'openai' | 'anthropic' | 'custom';
+    provider?: "deepseek" | "openai" | "anthropic" | "custom";
     apiKey?: string;
     apiUrl?: string;
     model?: string;
   },
   options?: {
-    confirmationNodes?: string[];
     continueOnFailure?: boolean;
   }
 ): Flow {
-  const builder = new FlowBuilder('simulate-dialog', 'Simulate Dialog')
-    .setDescription('Generate and validate dialog scenarios');
+  const builder = new FlowBuilder(
+    "simulate-dialog",
+    "Simulate Dialog"
+  ).setDescription("Generate and validate dialog scenarios");
 
   // Pre node: Validate and Transform input (merged)
   const validateAndTransform = createPreNode(
-    'validate-and-transform-dialog-input',
-    'Validate and Transform Dialog Input',
+    "validate-and-transform-dialog-input",
+    "Validate and Transform Dialog Input",
     {
-      type: 'validate-and-transform',
+      type: "validate-and-transform",
       validationRules: [
-        { field: 'situation', required: true, type: 'string' },
-        { field: 'characterA', required: false, type: 'string' },
-        { field: 'characterB', required: false, type: 'string' },
+        { field: "situation", required: true, type: "string" },
+        { field: "characterA", required: false, type: "string" },
+        { field: "characterB", required: false, type: "string" },
       ],
       targetStructure: {
-        situation: '',
-        characterA: '',
-        characterB: '',
-        notes: '',
+        situation: "",
+        characterA: "",
+        characterB: "",
+        notes: "",
       },
     }
   );
 
   // LLM node: Dialog Analysis
   const dialogAnalysis = createLLMNode(
-    'dialog-analysis',
-    'Dialog Analysis',
+    "dialog-analysis",
+    "Dialog Analysis",
     {
-      type: 'dialog-analysis',
-      provider: llmConfig?.provider || 'deepseek',
+      type: "dialog-analysis",
+      provider: llmConfig?.provider || "deepseek",
       apiKey: llmConfig?.apiKey,
       apiUrl: llmConfig?.apiUrl,
       model: llmConfig?.model,
       systemPrompt:
-        'You are a language learning assistant. Analyze dialog scenarios and extract key information.',
+        "You are a language learning assistant. Analyze dialog scenarios and extract key information.",
       userPromptTemplate:
-        'Analyze this dialog scenario: {{input}}\n\nProvide analysis in JSON format with: number_of_characters, situation_description, and target_language.',
-      responseFormat: 'json',
+        "Analyze this dialog scenario: {{input}}\n\nProvide analysis in JSON format with: number_of_characters, situation_description, and target_language.",
+      responseFormat: "json",
       showResponse: true, // Show response in dialog
     },
-    'Analyze dialog scenario to understand characters and situation'
+    "Analyze dialog scenario to understand characters and situation"
   );
 
   // LLM node: Dialog Generation
   const dialogGeneration = createLLMNode(
-    'dialog-generation',
-    'Dialog Generation',
+    "dialog-generation",
+    "Dialog Generation",
     {
-      type: 'dialog-generation',
-      provider: llmConfig?.provider || 'deepseek',
+      type: "dialog-generation",
+      provider: llmConfig?.provider || "deepseek",
       apiKey: llmConfig?.apiKey,
       apiUrl: llmConfig?.apiUrl,
       model: llmConfig?.model,
       systemPrompt:
-        'You are a language learning assistant. Generate natural dialog conversations based on the scenario and analysis.',
+        "You are a language learning assistant. Generate natural dialog conversations based on the scenario and analysis.",
       userPromptTemplate:
-        '{{#if previousDialog}}You are extending an existing dialog. Previous dialog:\n{{previousDialog}}\n\nUser extension request: {{extensionRequest}}\n\nPlease extend the dialog naturally, maintaining the same characters and style. Append new dialog entries to the existing ones. The output MUST be in JSON format with:\n- "characters": ["characterAName", "characterBName"]\n- "dialog": [\n    ...existing entries...,\n    {\n      "character": "characterAName",\n      "use_text": "...",\n      "learn_text": "..."\n    },\n    ...new entries...\n  ]\n{{else}}Based on the analysis: {{input}}\n\n{{dialogFormatInstructions}}\n\nGenerate a natural dialog conversation. The output MUST be in JSON format with:\n- "characters": ["characterAName", "characterBName"]\n- "dialog": [\n    {\n      "character": "characterAName",\n      "use_text": "...",\n      "learn_text": "..."\n    },\n    ...\n  ]\n\nMake the dialog natural, relevant to the situation, and appropriate for language learning.{{/if}}',
-      responseFormat: 'json',
+        '{{#if previousDialog}}You are extending an existing dialog. Previous dialog:\n{{previousDialog}}\n\nUser extension request: {{extensionRequest}}\n\nPlease extend the dialog naturally, maintaining the same characters and style. You have two options:\n1. Append new entries to the end (old + new)\n2. Integrate new entries throughout the dialog where they make sense (old mixed with new)\n\nChoose the approach that creates the most natural and coherent conversation flow. After combining the dialogs, ensure the entire dialog makes sense as a whole - check for:\n- Logical flow and continuity\n- Natural conversation progression\n- Consistent character behavior and style\n- Appropriate transitions between old and new content\n\nIf the extension request suggests inserting content at a specific point or modifying existing content, you may need to reorganize or mix the entries. The final dialog should read as one cohesive conversation.\n\nThe output MUST be in JSON format with:\n- "characters": ["characterAName", "characterBName"]\n- "dialog": [\n    {\n      "character": "characterAName",\n      "use_text": "...",\n      "learn_text": "..."\n    },\n    ...all entries (old and new, properly integrated)...\n  ]\n{{else}}Based on the analysis: {{input}}\n\n{{dialogFormatInstructions}}\n\nGenerate a natural dialog conversation. The output MUST be in JSON format with:\n- "characters": ["characterAName", "characterBName"]\n- "dialog": [\n    {\n      "character": "characterAName",\n      "use_text": "...",\n      "learn_text": "..."\n    },\n    ...\n  ]\n\nMake the dialog natural, relevant to the situation, and appropriate for language learning.{{/if}}',
+      responseFormat: "json",
       showResponse: true, // Show response in dialog
     },
-    'Generate dialog conversation with both user and learning language'
+    "Generate dialog conversation with both user and learning language"
   );
 
   // LLM node: Dialog Check
-  const dialogCheck = createLLMNode(
-    'dialog-check',
-    'Dialog Check',
+  const dialogCheckNode = createLLMNode(
+    "dialog-check",
+    "Dialog Check",
     {
-      type: 'dialog-check',
-      provider: llmConfig?.provider || 'deepseek',
+      type: "dialog-check",
+      provider: llmConfig?.provider || "deepseek",
       apiKey: llmConfig?.apiKey,
       apiUrl: llmConfig?.apiUrl,
       model: llmConfig?.model,
       systemPrompt:
-        'You are a language learning assistant. Validate dialog content for correctness, relevance, and quality.',
+        "You are a language learning assistant. Validate dialog content for correctness, relevance, and quality.",
       userPromptTemplate:
         'Validate this generated dialog against the original analysis.\n\nOriginal Analysis:\n{{previousOutput}}\n\nGenerated Dialog:\n{{input}}\n\n{{validationInstructions}}\n\nCheck if the dialog is:\n1. Valid (properly formatted with characters and dialog array)\n2. Relevant to the original scenario and analysis\n3. Appropriate for language learning\n4. Natural and coherent\n\nReturn JSON with:\n- "is_valid": true/false if not valid',
-      responseFormat: 'json',
+      responseFormat: "json",
+      showResponse: false,
     },
-    'Validate generated dialog correctness and relevance'
+    "Validate generated dialog correctness and relevance"
   );
+
+  // Add backNodeHandler to dialog-check node
+  // This allows going back to dialog-generation with new extension input
+  // Only brings the dialog-generation output (not dialog-check output)
+  const dialogCheck = {
+    ...dialogCheckNode,
+    backNodeHandler: (
+      state: FlowState,
+      backInput: string,
+      currentNodeOutput: unknown
+    ): BackNodeHandlerResult | null => {
+      // Find dialog-generation step to get its output
+      const dialogGenStep = state.steps.find(
+        (s) => s.nodeId === "dialog-generation"
+      );
+      const dialogGenOutput = dialogGenStep?.result?.output;
+
+      if (!dialogGenOutput) {
+        return null; // Fall back to default behavior
+      }
+
+      // Get original analysis from dialog-analysis step
+      const dialogAnalysisStep = state.steps.find(
+        (s) => s.nodeId === "dialog-analysis"
+      );
+      const originalAnalysis = dialogAnalysisStep?.result?.output;
+
+      return {
+        targetNodeId: "dialog-generation",
+        contextUpdate: {
+          input: {
+            previousDialog: dialogGenOutput,
+            extensionRequest: backInput,
+            ...(originalAnalysis ? { originalAnalysis } : {}),
+          },
+          previousOutput: dialogGenOutput, // Use dialog-generation output, not dialog-check output
+        },
+        // Only include dialog-generation output, not dialog-check output
+        includeOutputs: [
+          { nodeId: "dialog-generation", as: "previousDialog" },
+          ...(originalAnalysis
+            ? [{ nodeId: "dialog-analysis", as: "originalAnalysis" }]
+            : []),
+        ],
+      };
+    },
+  };
 
   // LLM node: Dialog Audio Generation
   const dialogAudio = createLLMNode(
-    'dialog-audio',
-    'Dialog Audio',
+    "dialog-audio",
+    "Dialog Audio",
     {
-      type: 'dialog-audio',
-      provider: llmConfig?.provider || 'deepseek',
+      type: "dialog-audio",
+      provider: llmConfig?.provider || "deepseek",
       apiKey: llmConfig?.apiKey,
       apiUrl: llmConfig?.apiUrl,
       model: llmConfig?.model,
       systemPrompt:
-        'You are a language learning assistant. Generate audio specifications for dialog content. Extract only the learn_text (learning language text) from each dialog entry and prepare it for audio generation with character-appropriate voices.',
+        "You are a language learning assistant. Generate audio specifications for dialog content. Extract only the learn_text (learning language text) from each dialog entry and prepare it for audio generation with character-appropriate voices.",
       userPromptTemplate:
         'Generate audio specifications for this validated dialog:\n\n{{input}}\n\nExtract ONLY the "learn_text" field from each dialog entry (ignore "use_text"). For each learn_text sentence:\n1. Assign a unique segment ID (e.g., "segment-0", "segment-1")\n2. Identify which character said it\n3. Suggest appropriate voice characteristics for that character (gender, age, tone, etc.)\n4. Keep the original sentence index from the dialog array for easy matching\n\nReturn JSON format:\n{\n  "audio_segments": [\n    {\n      "id": "segment-0",\n      "dialog_index": 0,\n      "character": "characterAName",\n      "learn_text": "...",\n      "voice_suggestion": {\n        "gender": "male/female/neutral",\n        "age_range": "young/adult/elderly",\n        "tone": "friendly/formal/casual/etc",\n        "description": "brief voice description"\n      }\n    },\n    ...\n  ],\n  "characters": {\n    "characterAName": {\n      "voice_id": "voice-1",\n      "voice_description": "..."\n    },\n    "characterBName": {\n      "voice_id": "voice-2",\n      "voice_description": "..."\n    }\n  }\n}\n\nMake sure each character has a distinct voice suggestion, and each segment has a clear ID that matches its position in the dialog.',
-      responseFormat: 'json',
+      responseFormat: "json",
     },
-    'Generate audio specifications for dialog with character-specific voices'
+    "Generate audio specifications for dialog with character-specific voices"
   );
 
   const flow = builder
@@ -461,35 +532,59 @@ export function createSimulateDialogFlow(
     .addNode(dialogGeneration)
     .addNode(dialogCheck)
     .addNode(dialogAudio)
-    // Note: dialog-check validation is now handled in server-flow.ts
-    // Condition is kept for backward compatibility but logic is in server-flow
-    .addCondition({
-      nodeId: 'dialog-check',
-      condition: (result) => {
-        if (!result.success) return false;
-        const output = result.output as Record<string, unknown>;
-        // Check for various possible field names
-        return (
-          output.valid === true ||
-          output.isValid === true ||
-          output.is_valid === true
-        );
-      },
-      onTrue: 'dialog-audio',
-      onFalse: 'dialog-generation', // Go back to generation if check fails (handled in server-flow)
-    })
     .build();
 
-  // Apply options
+  // Get the config to add validation check and operations
   const state = flow.getState();
-  // Set dialog-check as confirmation node by default if not specified
-  if (options?.confirmationNodes) {
-    state.config.confirmationNodes = options.confirmationNodes;
-  } else {
-    state.config.confirmationNodes = ['dialog-check'];
+  const config = state.config;
+
+  // Add validation check for dialog-check (if invalid, retry dialog-generation)
+  if (!config.validationChecks) {
+    config.validationChecks = [];
   }
+  config.validationChecks.push({
+    nodeId: "dialog-check",
+    check: (result) => {
+      if (!result.success) return false;
+      const output = result.output as Record<string, unknown>;
+      // Check for various possible field names
+      return (
+        output.valid === true ||
+        output.isValid === true ||
+        output.is_valid === true
+      );
+    },
+    maxRetries: 3,
+    retryTargetNodeId: "dialog-generation", // Go back to dialog-generation if invalid
+  });
+
+  // Add operations for dialog-check (confirm and restart/extend)
+  if (!config.nodeOperations) {
+    config.nodeOperations = {};
+  }
+  config.nodeOperations["dialog-check"] = [
+    {
+      action: "confirm",
+      label: "Confirm",
+    },
+    {
+      action: "restart",
+      label: "Extend",
+      handler: (result, userInput) => {
+        // Restart goes back to dialog-generation
+        return "dialog-generation";
+      },
+    },
+  ];
+
+  // No condition needed - validation check handles invalid cases (retry)
+  // When valid, operations pause workflow. When confirm clicked, default next
+  // (next node in sequence) will route to dialog-audio automatically
+
+  // Apply options - get fresh state
+  const finalState = flow.getState();
   if (options?.continueOnFailure !== undefined) {
-    state.config.continueOnFailure = options.continueOnFailure;
+    finalState.config.continueOnFailure = options.continueOnFailure;
   }
 
   return flow;
@@ -501,103 +596,103 @@ export function createSimulateDialogFlow(
  */
 export function createExtendVocabularyFlow(
   llmConfig?: {
-    provider?: 'deepseek' | 'openai' | 'anthropic' | 'custom';
+    provider?: "deepseek" | "openai" | "anthropic" | "custom";
     apiKey?: string;
     apiUrl?: string;
     model?: string;
   },
   options?: {
-    confirmationNodes?: string[];
     continueOnFailure?: boolean;
   }
 ): Flow {
-  const builder = new FlowBuilder('extend-vocabulary', 'Extend Vocabulary')
-    .setDescription('Analyze and extend vocabulary with relationships');
+  const builder = new FlowBuilder(
+    "extend-vocabulary",
+    "Extend Vocabulary"
+  ).setDescription("Analyze and extend vocabulary with relationships");
 
   // Pre node: Format input
   const formatInput = createPreNode(
-    'format-vocab-input',
-    'Format Vocabulary Input',
+    "format-vocab-input",
+    "Format Vocabulary Input",
     {
-      type: 'format',
-      format: 'structured',
+      type: "format",
+      format: "structured",
     }
   );
 
   // LLM node: Extension Analysis
   const extensionAnalysis = createLLMNode(
-    'extension-analysis',
-    'Extension Analysis',
+    "extension-analysis",
+    "Extension Analysis",
     {
-      type: 'extension-analysis',
-      provider: llmConfig?.provider || 'deepseek',
+      type: "extension-analysis",
+      provider: llmConfig?.provider || "deepseek",
       apiKey: llmConfig?.apiKey,
       apiUrl: llmConfig?.apiUrl,
       model: llmConfig?.model,
       systemPrompt:
-        'You are a language learning assistant. Analyze vocabulary extension requests.',
+        "You are a language learning assistant. Analyze vocabulary extension requests.",
       userPromptTemplate:
-        'Analyze this vocabulary extension request: {{input}}\n\nDetermine: vocabulary category (family, work, shopping, daily, etc.), number of words needed, and target language.',
-      responseFormat: 'json',
+        "Analyze this vocabulary extension request: {{input}}\n\nDetermine: vocabulary category (family, work, shopping, daily, etc.), number of words needed, and target language.",
+      responseFormat: "json",
     },
-    'Analyze vocabulary extension requirements'
+    "Analyze vocabulary extension requirements"
   );
 
   // LLM node: Extension Check
   const extensionCheck = createLLMNode(
-    'extension-check',
-    'Extension Check',
+    "extension-check",
+    "Extension Check",
     {
-      type: 'extension-check',
-      provider: llmConfig?.provider || 'deepseek',
+      type: "extension-check",
+      provider: llmConfig?.provider || "deepseek",
       apiKey: llmConfig?.apiKey,
       apiUrl: llmConfig?.apiUrl,
       model: llmConfig?.model,
       systemPrompt:
-        'You are a language learning assistant. Validate vocabulary lists for correctness.',
+        "You are a language learning assistant. Validate vocabulary lists for correctness.",
       userPromptTemplate:
-        'Check if these vocabularies are correct and related to the analysis: {{input}}',
-      responseFormat: 'json',
+        "Check if these vocabularies are correct and related to the analysis: {{input}}",
+      responseFormat: "json",
     },
-    'Validate vocabulary correctness'
+    "Validate vocabulary correctness"
   );
 
   // LLM node: Extension Relationship Analysis
   const extensionRelationshipAnalysis = createLLMNode(
-    'extension-relationship-analysis',
-    'Extension Relationship Analysis',
+    "extension-relationship-analysis",
+    "Extension Relationship Analysis",
     {
-      type: 'extension-relationship-analysis',
-      provider: llmConfig?.provider || 'deepseek',
+      type: "extension-relationship-analysis",
+      provider: llmConfig?.provider || "deepseek",
       apiKey: llmConfig?.apiKey,
       apiUrl: llmConfig?.apiUrl,
       model: llmConfig?.model,
       systemPrompt:
-        'You are a language learning assistant. Analyze relationships between vocabulary words.',
+        "You are a language learning assistant. Analyze relationships between vocabulary words.",
       userPromptTemplate:
-        'Define relationships for these words (固定搭配, 同义词, 同类词, 反义词, etc.): {{input}}',
-      responseFormat: 'json',
+        "Define relationships for these words (固定搭配, 同义词, 同类词, 反义词, etc.): {{input}}",
+      responseFormat: "json",
     },
-    'Analyze vocabulary relationships'
+    "Analyze vocabulary relationships"
   );
 
   // LLM node: Extension Relationship Check
   const extensionRelationshipCheck = createLLMNode(
-    'extension-relationship-check',
-    'Extension Relationship Check',
+    "extension-relationship-check",
+    "Extension Relationship Check",
     {
-      type: 'extension-relationship-check',
-      provider: llmConfig?.provider || 'deepseek',
+      type: "extension-relationship-check",
+      provider: llmConfig?.provider || "deepseek",
       apiKey: llmConfig?.apiKey,
       apiUrl: llmConfig?.apiUrl,
       model: llmConfig?.model,
       systemPrompt:
-        'You are a language learning assistant. Validate vocabulary relationships.',
-      userPromptTemplate:
-        'Check if these relationships are correct: {{input}}',
-      responseFormat: 'json',
+        "You are a language learning assistant. Validate vocabulary relationships.",
+      userPromptTemplate: "Check if these relationships are correct: {{input}}",
+      responseFormat: "json",
     },
-    'Validate vocabulary relationships'
+    "Validate vocabulary relationships"
   );
 
   const flow = builder
@@ -607,24 +702,21 @@ export function createExtendVocabularyFlow(
     .addNode(extensionRelationshipAnalysis)
     .addNode(extensionRelationshipCheck)
     .addCondition({
-      nodeId: 'extension-check',
+      nodeId: "extension-check",
       condition: (result) => {
         if (!result.success) return false;
         const output = result.output as Record<string, unknown>;
         return output.valid === true || output.isValid === true;
       },
-      onTrue: 'extension-relationship-analysis',
-      onFalse: 'extension-analysis', // Go back to analysis if check fails
+      onTrue: "extension-relationship-analysis",
+      onFalse: "extension-analysis", // Go back to analysis if check fails
     })
     .build();
 
   // Apply options
-  const state = flow.getState();
-  if (options?.confirmationNodes) {
-    state.config.confirmationNodes = options.confirmationNodes;
-  }
+  const finalState = flow.getState();
   if (options?.continueOnFailure !== undefined) {
-    state.config.continueOnFailure = options.continueOnFailure;
+    finalState.config.continueOnFailure = options.continueOnFailure;
   }
 
   return flow;
@@ -635,38 +727,35 @@ export function createExtendVocabularyFlow(
  * Single LLM node for regular chat conversations
  * showResponse: false so header is not shown
  */
-export function createSimpleChatFlow(
-  llmConfig?: {
-    provider?: 'deepseek' | 'openai' | 'anthropic' | 'custom';
-    apiKey?: string;
-    apiUrl?: string;
-    model?: string;
-  }
-): Flow {
-  const builder = new FlowBuilder('chat', 'Simple Chat')
-    .setDescription('Regular chat conversation');
+export function createSimpleChatFlow(llmConfig?: {
+  provider?: "deepseek" | "openai" | "anthropic" | "custom";
+  apiKey?: string;
+  apiUrl?: string;
+  model?: string;
+}): Flow {
+  const builder = new FlowBuilder("chat", "Simple Chat").setDescription(
+    "Regular chat conversation"
+  );
 
   // Single LLM node for chat
   const chatNode = createLLMNode(
-    'chat-response',
-    'Chat Response',
+    "chat-response",
+    "Chat Response",
     {
-      type: 'chat-response',
-      provider: llmConfig?.provider || 'deepseek',
+      type: "chat-response",
+      provider: llmConfig?.provider || "deepseek",
       apiKey: llmConfig?.apiKey,
       apiUrl: llmConfig?.apiUrl,
       model: llmConfig?.model,
-      systemPrompt: 'You are a helpful assistant.',
-      userPromptTemplate: '{{input}}',
-      responseFormat: 'text',
+      systemPrompt: "You are a helpful assistant.",
+      userPromptTemplate: "{{input}}",
+      responseFormat: "text",
       showResponse: false, // Don't show workflow header for regular chat
     },
-    'Respond to user messages in a conversational way'
+    "Respond to user messages in a conversational way"
   );
 
-  const flow = builder
-    .addNode(chatNode)
-    .build();
+  const flow = builder.addNode(chatNode).build();
 
   return flow;
 }

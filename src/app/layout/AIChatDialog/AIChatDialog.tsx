@@ -35,8 +35,9 @@ interface ChatMessage {
   nodeName?: string;
   isRunning?: boolean;
   hasError?: boolean;
-  needsConfirmation?: boolean;
-  confirmationNodeId?: string;
+  needsOperation?: boolean; // Whether this message is waiting for user operation
+  operationNodeId?: string; // Node ID that triggered the operation
+  operations?: Array<{ action: string; label: string }>; // Available operations for this message
   showResponse?: boolean; // Whether to show content (header always shows except for chat)
   isChatFlow?: boolean; // Whether this is a chat flow (affects header visibility)
 }
@@ -52,12 +53,15 @@ export const AIChatDialog = ({
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const aiConfig = useAppStore((state) => state.aiConfig);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   // Extension state
   const [waitingForExtension, setWaitingForExtension] = useState(false);
+  const [extensionInput, setExtensionInput] = useState("");
+  const [extendingMessageId, setExtendingMessageId] = useState<string | null>(
+    null
+  );
 
   // Determine flowId: use action if provided, otherwise use "chat" for regular chat
   const flowId = action || "chat";
@@ -74,11 +78,11 @@ export const AIChatDialog = ({
     reset: resetFlow,
     confirm: confirmFlow,
     reject: rejectFlow,
-    extend: extendFlow,
+    restart: restartFlow,
   } = useFlowController({
-      flowId,
-      onEvent: (event: FlowEvent) => {
-        // Handle flow events - unified approach for all workflows
+    flowId,
+    onEvent: (event: FlowEvent) => {
+      // Handle flow events - unified approach for all workflows
       if (event.type === "step-start") {
         const eventData = event.data as { state?: FlowState } | undefined;
         const stateFromEvent = eventData?.state;
@@ -125,7 +129,10 @@ export const AIChatDialog = ({
                 ? {
                     ...msg,
                     // Keep existing content if it was streamed, otherwise use output
-                    content: msg.content && msg.content.length > 0 ? msg.content : outputStr,
+                    content:
+                      msg.content && msg.content.length > 0
+                        ? msg.content
+                        : outputStr,
                     isRunning: false,
                     hasError: false,
                     showResponse: showResponse ?? true, // Default to true if undefined
@@ -199,10 +206,11 @@ export const AIChatDialog = ({
       } else if (event.type === "stream-chunk") {
         // Append chunk to the last message (same message box)
         // Handle both string and JSON data
-        const chunkStr = typeof event.data === "string" 
-          ? event.data 
-          : formatOutput(event.data);
-        
+        const chunkStr =
+          typeof event.data === "string"
+            ? event.data
+            : formatOutput(event.data);
+
         setMessages((prev) => {
           const lastMsg = prev[prev.length - 1];
           if (lastMsg && lastMsg.role === "workflow" && lastMsg.isRunning) {
@@ -215,8 +223,10 @@ export const AIChatDialog = ({
           }
           return prev;
         });
-      } else if (event.type === "confirmation-required") {
+      } else if (event.type === "operation-required") {
+        // confirm & restart etc.
         const nodeName = getNodeName(event.nodeId, flowState || undefined);
+        const operations = event.operations || [];
         setMessages((prev) => {
           for (let i = prev.length - 1; i >= 0; i--) {
             const msg = prev[i];
@@ -233,8 +243,9 @@ export const AIChatDialog = ({
                   m.id === msg.id
                     ? {
                         ...m,
-                        needsConfirmation: true,
-                        confirmationNodeId: event.nodeId || "",
+                        needsOperation: true,
+                        operationNodeId: event.nodeId || "",
+                        operations,
                       }
                     : m
                 );
@@ -247,10 +258,11 @@ export const AIChatDialog = ({
           if (lastWorkflowMsg) {
             return prev.map((m) =>
               m.id === lastWorkflowMsg.id
-                ? {
+                  ? {
                     ...m,
-                    needsConfirmation: true,
-                    confirmationNodeId: event.nodeId || "",
+                    needsOperation: true,
+                    operationNodeId: event.nodeId || "",
+                    operations,
                   }
                 : m
             );
@@ -273,8 +285,8 @@ export const AIChatDialog = ({
         setMessages((prev) =>
           prev.map((msg) => ({
             ...msg,
-            needsConfirmation: false,
-            confirmationNodeId: undefined,
+            needsOperation: false,
+            operationNodeId: undefined,
           }))
         );
         setWaitingForExtension(false);
@@ -290,7 +302,7 @@ export const AIChatDialog = ({
             onResponse?.(outputStr);
           }
         }
-      } else if (state.status === "waiting-confirmation") {
+      } else if (state.status === "waiting-operation") {
         if (!waitingForExtension) {
           setIsLoading(false);
         }
@@ -373,10 +385,19 @@ export const AIChatDialog = ({
       setMessage("");
       setWaitingForExtension(false);
 
-      try {
-        await extendFlow(trimmedMessage);
-      } catch (error) {
-        // Silently handle errors
+      // Find restart operation from current message
+      const currentMsg = messages.find(
+        (m) => m.needsOperation && m.operations
+      );
+      const restartOp = currentMsg?.operations?.find(
+        (op) => op.action === "restart"
+      );
+      if (restartOp) {
+        try {
+          await restartFlow(trimmedMessage, "restart");
+        } catch (error) {
+          // Silently handle errors
+        }
       }
       return;
     }
@@ -413,7 +434,7 @@ export const AIChatDialog = ({
             : msg
         )
       );
-    } else if (flowStatus === "waiting-confirmation") {
+    } else if (flowStatus === "waiting-operation") {
       setIsLoading(false);
     } else if (flowStatus === "running") {
       if (!waitingForExtension) {
@@ -456,10 +477,15 @@ export const AIChatDialog = ({
                 // Header always shows for workflow messages (except chat flow)
                 const showHeader = !msg.isChatFlow;
                 // Content shows when showResponse is true (defaults to true) and there's content or error
-                const showContent = (msg.showResponse !== false) && (hasContent || msg.hasError);
+                const showContent =
+                  msg.showResponse !== false && (hasContent || msg.hasError);
                 // Show typing only when: running, no content yet, no error
-                const showTyping = msg.isRunning && !hasContent && !msg.hasError && (msg.showResponse !== false);
-                const showButtons = msg.needsConfirmation;
+                const showTyping =
+                  msg.isRunning &&
+                  !hasContent &&
+                  !msg.hasError &&
+                  msg.showResponse !== false;
+                const showButtons = msg.needsOperation;
 
                 return (
                   <div
@@ -545,7 +571,7 @@ export const AIChatDialog = ({
                             setMessages((prev) =>
                               prev.map((m) =>
                                 m.id === msg.id
-                                  ? { ...m, needsConfirmation: false }
+                                  ? { ...m, needsOperation: false }
                                   : m
                               )
                             );
@@ -554,25 +580,129 @@ export const AIChatDialog = ({
                         >
                           {t("confirm") || "Confirm"}
                         </button>
-                        {msg.confirmationNodeId === "dialog-check" && (
+                        {/* Show restart/extend button if operation exists */}
+                        {msg.operations?.some(
+                          (op) => op.action === "restart"
+                        ) &&
+                          !extendingMessageId && (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                setExtendingMessageId(msg.id);
+                                setWaitingForExtension(true);
+                                setMessages((prev) =>
+                                  prev.map((m) =>
+                                    m.id === msg.id
+                                      ? { ...m, needsOperation: false }
+                                      : m
+                                  )
+                                );
+                              }}
+                              className={workflowStyles.extendButton}
+                            >
+                              {msg.operations?.find(
+                                (op) => op.action === "restart"
+                              )?.label ||
+                                t("extend") ||
+                                "Extend"}
+                            </button>
+                          )}
+                      </div>
+
+                      {/* Extension Input - shown when this message is being extended */}
+                      {extendingMessageId === msg.id && (
+                        <div className={workflowStyles.extensionInputContainer}>
+                          <input
+                            type="text"
+                            value={extensionInput}
+                            onChange={(e) => setExtensionInput(e.target.value)}
+                            placeholder={
+                              t("extensionInputPlaceholder") ||
+                              msg.operationNodeId === "dialog-check"
+                                ? "Describe how you'd like to extend the dialog..."
+                                : "Enter your input..."
+                            }
+                            className={workflowStyles.extensionInput}
+                            onKeyDown={async (e) => {
+                              if (e.key === "Enter" && !e.shiftKey) {
+                                e.preventDefault();
+                                const trimmedInput = extensionInput.trim();
+                                if (!trimmedInput) return;
+
+                                // Add user message
+                                const userMsg: ChatMessage = {
+                                  id: createId(),
+                                  role: "user",
+                                  content: trimmedInput,
+                                  timestamp: new Date(),
+                                };
+                                setMessages((prev) => [...prev, userMsg]);
+                                setExtensionInput("");
+                                setWaitingForExtension(false);
+                                setExtendingMessageId(null);
+
+                                try {
+                                  // Find the restart operation
+                                  const restartOp = msg.operations?.find(
+                                    (op) => op.action === "restart"
+                                  );
+                                  if (restartOp) {
+                                    await restartFlow(trimmedInput, "restart");
+                                  }
+                                } catch (error) {
+                                  // Silently handle errors
+                                }
+                              }
+                            }}
+                            autoFocus
+                          />
                           <button
                             type="button"
                             onClick={async () => {
-                              setWaitingForExtension(true);
-                              setMessages((prev) =>
-                                prev.map((m) =>
-                                  m.id === msg.id
-                                    ? { ...m, needsConfirmation: false }
-                                    : m
-                                )
-                              );
+                              const trimmedInput = extensionInput.trim();
+                              if (!trimmedInput) return;
+
+                              // Add user message
+                              const userMsg: ChatMessage = {
+                                id: createId(),
+                                role: "user",
+                                content: trimmedInput,
+                                timestamp: new Date(),
+                              };
+                              setMessages((prev) => [...prev, userMsg]);
+                              setExtensionInput("");
+                              setWaitingForExtension(false);
+                              setExtendingMessageId(null);
+
+                              try {
+                                const restartOp = msg.operations?.find(
+                                  (op) => op.action === "restart"
+                                );
+                                if (restartOp) {
+                                  await restartFlow(trimmedInput, "restart");
+                                }
+                              } catch (error) {
+                                // Silently handle errors
+                              }
                             }}
-                            className={workflowStyles.extendButton}
+                            className={workflowStyles.extensionSendButton}
+                            disabled={!extensionInput.trim()}
                           >
-                            {t("extend") || "Extend"}
+                            {t("send") || "Send"}
                           </button>
-                        )}
-                      </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setExtensionInput("");
+                              setWaitingForExtension(false);
+                              setExtendingMessageId(null);
+                            }}
+                            className={workflowStyles.extensionCancelButton}
+                          >
+                            {t("cancel") || "Cancel"}
+                          </button>
+                        </div>
+                      )}
 
                       {/* Timestamp */}
                       <div className={workflowStyles.workflowMessageTimestamp}>
@@ -615,17 +745,6 @@ export const AIChatDialog = ({
         </div>
       )}
 
-      {/* Extension Notice */}
-      {waitingForExtension && (
-        <div className={workflowStyles.extensionNotice}>
-          <span className={workflowStyles.extensionNoticeIcon}>💡</span>
-          <span className={workflowStyles.extensionNoticeText}>
-            {t("extensionNotice") ||
-              "Please type how you'd like to extend the dialog in the input below, then press Enter."}
-          </span>
-        </div>
-      )}
-
       {/* Input Form */}
       <form onSubmit={handleFormSubmit} className={formStyles.inputForm}>
         <div className={formStyles.inputFormInner}>
@@ -634,15 +753,12 @@ export const AIChatDialog = ({
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             placeholder={
-              waitingForExtension
-                ? t("extensionInputPlaceholder") ||
-                  "Describe how you'd like to extend the dialog..."
-                : placeholder ||
-                  (action
-                    ? `Enter input for ${action} workflow...`
-                    : "Type your message...")
+              placeholder ||
+              (action
+                ? `Enter input for ${action} workflow...`
+                : "Type your message...")
             }
-            disabled={isLoading && !waitingForExtension}
+            disabled={isLoading || waitingForExtension}
             className={formStyles.inputField}
           />
           <button

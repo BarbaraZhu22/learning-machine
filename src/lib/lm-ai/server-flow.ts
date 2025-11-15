@@ -11,6 +11,8 @@ import type {
   NodeResult,
   FlowEvent,
   LLMNode,
+  NodeOperation,
+  NodeOperationHandler,
 } from "./types";
 import { Flow } from "./flow";
 
@@ -55,14 +57,11 @@ class FlowSessionManager {
     return `flow_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
   }
 
-  // Cleanup old sessions (older than 1 hour)
-  cleanup(): void {
-    const oneHourAgo = Date.now() - 60 * 60 * 1000;
-    for (const [id, session] of this.sessions.entries()) {
-      if (session.lastActivity < oneHourAgo) {
-        this.sessions.delete(id);
-      }
-    }
+  // Cleanup a specific session immediately
+  // Called when workflow completes, errors, or is rejected
+  // No interval cleanup needed - sessions are cleaned up immediately when finished
+  cleanupSession(sessionId: string): void {
+    this.sessions.delete(sessionId);
   }
 }
 
@@ -73,20 +72,30 @@ interface FlowSession {
   status: FlowStatus;
   createdAt: number;
   lastActivity: number;
-  waitingForConfirmation?: {
+  waitingForOperation?: {
     stepIndex: number;
     nodeId: string;
     result: NodeResult;
+    operations: NodeOperation[];
   };
-  nodeRetryCount?: Map<string, number>; // Track retry count per node
+  nodeRetryCount?: Map<string, number>; // Track retry count per node for validation checks
 }
 
 const sessionManager = new FlowSessionManager();
 
-// Cleanup every 30 minutes
-if (typeof setInterval !== "undefined") {
-  setInterval(() => sessionManager.cleanup(), 30 * 60 * 1000);
+/**
+ * Get the session manager instance
+ * Used by API routes to manage sessions
+ */
+export function getSessionManager(): FlowSessionManager {
+  return sessionManager;
 }
+
+// No interval cleanup needed - sessions are cleaned up immediately when:
+// 1. Workflow completes (status = "completed")
+// 2. Workflow errors (status = "error") 
+// 3. User rejects (status = "error")
+// This is simpler and prevents any cleanup issues during active workflows
 
 /**
  * Execute LLM node with streaming support
@@ -289,53 +298,86 @@ async function* callLLMAPIStreaming(
 }
 
 /**
- * Execute flow with streaming support
+ * Resume flow execution from an existing session
  */
-export async function* executeFlowStream(
-  flowConfig: FlowConfig,
-  initialContext: NodeContext,
+export async function* resumeFlowStream(
+  sessionId: string,
   onEvent?: (event: FlowEvent) => void
 ): AsyncGenerator<FlowEvent, FlowState, unknown> {
-  const flow = new Flow(flowConfig, initialContext);
-  const sessionId = sessionManager.createSession(flow, initialContext);
+  const session = sessionManager.getSession(sessionId);
+  if (!session) {
+    throw new Error(`Session not found: ${sessionId}`);
+  }
 
+  // Update lastActivity to keep session alive
+  sessionManager.updateSession(sessionId, { lastActivity: Date.now() });
+
+  const flow = session.flow;
+  // Always get fresh state from flow to ensure we have the latest currentStepIndex
   const state = flow.getState();
-  state.sessionId = sessionId;
+
+  // Continue execution from current step
+  return yield* continueFlowExecutionStream(state, sessionId, onEvent);
+}
+
+/**
+ * Continue flow execution stream from current state
+ */
+async function* continueFlowExecutionStream(
+  state: FlowState,
+  sessionId: string,
+  onEvent?: (event: FlowEvent) => void
+): AsyncGenerator<FlowEvent, FlowState, unknown> {
+  const session = sessionManager.getSession(sessionId);
+  if (!session) {
+    throw new Error(`Session not found: ${sessionId}`);
+  }
+
+  const flow = session.flow;
+  const flowConfig = state.config;
 
   try {
-    // Emit initial status with session ID
-    const initialEvent: FlowEvent = {
+    // Always get fresh state from flow at the start to ensure we have the latest currentStepIndex
+    // This is important because the state parameter might be stale
+    let currentState = flow.getState();
+    
+    // Emit status change to indicate resuming
+    const resumeEvent: FlowEvent = {
       type: "status-change",
       flowId: flowConfig.id,
       status: "running",
-      data: { sessionId, state },
+      data: { sessionId, state: currentState },
     };
-    yield initialEvent;
-    onEvent?.(initialEvent);
+    yield resumeEvent;
+    onEvent?.(resumeEvent);
 
     sessionManager.updateSession(sessionId, { status: "running" });
 
-      // Execute flow step by step
-      while (state.status === "running" || state.status === "idle") {
-        const step = state.steps[state.currentStepIndex];
+    // Execute flow step by step
+    // Always get fresh state from flow in each iteration to ensure we're using the latest state
+    while (currentState.status === "running" || currentState.status === "idle") {
+      // Update lastActivity periodically to keep session alive during execution
+      sessionManager.updateSession(sessionId, { lastActivity: Date.now() });
+      
+      // Get fresh state from flow to ensure we have the latest currentStepIndex
+      currentState = flow.getState();
+      const step = currentState.steps[currentState.currentStepIndex];
 
-        if (!step) {
-          state.status = "completed";
-          break;
-        }
+      if (!step) {
+        currentState.status = "completed";
+        flow.setStatus("completed");
+        break;
+      }
 
-        // Check if this node requires confirmation
-        const requiresConfirmation = flowConfig.confirmationNodes?.includes(
-          step.nodeId
-        );
+      // Operations are checked after node execution, not before
 
       // Emit step start with state
       const stepStartEvent: FlowEvent = {
         type: "step-start",
         flowId: flowConfig.id,
-        stepIndex: state.currentStepIndex,
+        stepIndex: currentState.currentStepIndex,
         nodeId: step.nodeId,
-        data: { sessionId, state },
+        data: { sessionId, state: currentState },
       };
       yield stepStartEvent;
       onEvent?.(stepStartEvent);
@@ -347,13 +389,13 @@ export async function* executeFlowStream(
         let finalResult: NodeResult | null = null;
 
         // Stream chunks and yield them immediately
-        for await (const item of executeLLMNodeWithStreaming(step.node, state.context)) {
+        for await (const item of executeLLMNodeWithStreaming(step.node, currentState.context)) {
           if (item.type === "chunk") {
             // Yield stream-chunk events immediately for real-time streaming
             const streamEvent: FlowEvent = {
               type: "stream-chunk",
               flowId: flowConfig.id,
-              stepIndex: state.currentStepIndex,
+              stepIndex: currentState.currentStepIndex,
               nodeId: step.nodeId,
               data: item.data as string,
             };
@@ -370,23 +412,27 @@ export async function* executeFlowStream(
         result = finalResult;
       } else {
         // Execute non-LLM nodes normally
-        result = await step.node.execute(state.context);
+        result = await step.node.execute(currentState.context);
       }
 
       step.result = result;
       step.executed = true;
       step.timestamp = Date.now();
 
-      // Update context
-      state.context.previousOutput = result.output;
-      state.context.input = result.output;
+      // Update context in flow
+      currentState.context.previousOutput = result.output;
+      currentState.context.input = result.output;
+      flow.updateContext({
+        previousOutput: result.output,
+        input: result.output,
+      });
 
       // Handle failure
       if (!result.success) {
         const errorEvent: FlowEvent = {
           type: "step-error",
           flowId: flowConfig.id,
-          stepIndex: state.currentStepIndex,
+          stepIndex: currentState.currentStepIndex,
           nodeId: step.nodeId,
           error: result.error,
         };
@@ -396,8 +442,11 @@ export async function* executeFlowStream(
         // Check if we should continue on failure
         if (flowConfig.continueOnFailure) {
           // Continue with input as output
-          state.context.input =
-            state.context.previousOutput || state.context.input;
+          currentState.context.input =
+            currentState.context.previousOutput || currentState.context.input;
+          flow.updateContext({
+            input: currentState.context.input,
+          });
         } else {
           // Check conditions for retry
           const condition = flowConfig.conditions?.find(
@@ -405,213 +454,295 @@ export async function* executeFlowStream(
           );
           if (condition && !condition.condition(result)) {
             const nextNodeId = condition.onFalse;
-            const nextIndex = state.steps.findIndex(
+            const nextIndex = currentState.steps.findIndex(
               (s) => s.nodeId === nextNodeId
             );
             if (nextIndex !== -1) {
-              state.currentStepIndex = nextIndex;
-              continue;
+              flow.setCurrentStepIndex(nextIndex);
+              continue; // Will get fresh state on next iteration
             }
           }
 
-          state.status = "error";
-          state.error = result.error || "Node execution failed";
+          currentState.status = "error";
+          currentState.error = result.error || "Node execution failed";
+          flow.setStatus("error");
           break;
         }
       }
+
+      // Get fresh state after context updates
+      currentState = flow.getState();
 
       // Emit step complete with updated state
       const stepCompleteEvent: FlowEvent = {
         type: "step-complete",
         flowId: flowConfig.id,
-        stepIndex: state.currentStepIndex,
+        stepIndex: currentState.currentStepIndex,
         nodeId: step.nodeId,
-        data: { output: result.output, state },
+        data: { output: result.output, state: currentState },
       };
       yield stepCompleteEvent;
       onEvent?.(stepCompleteEvent);
+
+      // STEP 1: Check validation check (if result is invalid, retry up to maxRetries)
+      const validationCheck = flowConfig.validationChecks?.find(
+        (vc) => vc.nodeId === step.nodeId
+      );
       
-      // Also emit status-change to update UI with current state
-      const statusUpdateEvent: FlowEvent = {
-        type: "status-change",
-        flowId: flowConfig.id,
-        status: state.status,
-        data: { sessionId, state },
-      };
-      yield statusUpdateEvent;
-      onEvent?.(statusUpdateEvent);
-
-      // For dialog-check: check validation first, then decide on confirmation or retry
-      if (step.nodeId === "dialog-check") {
-        const output = result.output as Record<string, unknown>;
-        const isValid = 
-          output.valid === true ||
-          output.isValid === true ||
-          output.is_valid === true;
-
-        if (!isValid) {
-          // Invalid: go back to dialog-generation (with retry limit check)
-          const dialogGenIndex = state.steps.findIndex((s) => s.nodeId === "dialog-generation");
-          if (dialogGenIndex === -1) {
-            state.status = "error";
-            state.error = "Dialog generation node not found";
-            break;
-          }
-
-          // Check retry count
-          const session = sessionManager.getSession(sessionId);
-          if (session) {
-            const retryCount = (session.nodeRetryCount?.get("dialog-generation") || 0) + 1;
-            session.nodeRetryCount?.set("dialog-generation", retryCount);
-            
-            const maxRetries = 3;
-            if (retryCount > maxRetries) {
-              state.status = "error";
-              state.error = `Maximum retry limit (${maxRetries}) exceeded for dialog generation`;
-              break;
-            }
-          }
-
-          // Reset dialog-generation step and go back
-          const dialogGenStep = state.steps[dialogGenIndex];
-          if (dialogGenStep) {
-            dialogGenStep.executed = false;
-            dialogGenStep.result = undefined;
-          }
-          state.currentStepIndex = dialogGenIndex;
-          continue; // Continue to retry dialog generation
-        } else {
-          // Valid: require confirmation before proceeding
-          if (requiresConfirmation) {
-            state.status = "waiting-confirmation";
-            sessionManager.updateSession(sessionId, {
-              status: "waiting-confirmation",
-              waitingForConfirmation: {
-                stepIndex: state.currentStepIndex,
-                nodeId: step.nodeId,
-                result,
-              },
-            });
-
-            const confirmEvent: FlowEvent = {
-              type: "confirmation-required",
-              flowId: flowConfig.id,
-              stepIndex: state.currentStepIndex,
-              nodeId: step.nodeId,
-              data: result.output,
-            };
-            yield confirmEvent;
-            onEvent?.(confirmEvent);
-            break; // Wait for user confirmation
-          }
-        }
-      } else {
-        // For other nodes: check if confirmation is required
-        if (requiresConfirmation) {
-          state.status = "waiting-confirmation";
-          sessionManager.updateSession(sessionId, {
-            status: "waiting-confirmation",
-            waitingForConfirmation: {
-              stepIndex: state.currentStepIndex,
-              nodeId: step.nodeId,
-              result,
-            },
-          });
-
-          const confirmEvent: FlowEvent = {
-            type: "confirmation-required",
-            flowId: flowConfig.id,
-            stepIndex: state.currentStepIndex,
-            nodeId: step.nodeId,
-            data: result.output,
-          };
-          yield confirmEvent;
-          onEvent?.(confirmEvent);
-          break; // Wait for user confirmation
-        }
-      }
-
-      // Determine next node
-      const nextNodeId = getNextNodeId(flowConfig, step.nodeId, result, state);
-
-      if (nextNodeId === null) {
-        state.status = "completed";
-        break;
-      }
-
-      const nextIndex = state.steps.findIndex((s) => s.nodeId === nextNodeId);
-      if (nextIndex === -1) {
-        state.status = "error";
-        state.error = `Next node not found: ${nextNodeId}`;
-        break;
-      }
-
-      // Check if we're going back to a previous node (retry scenario)
-      const session = sessionManager.getSession(sessionId);
-      if (session && nextIndex < state.currentStepIndex) {
-        // We're going backwards, increment retry count
-        const retryCount = (session.nodeRetryCount?.get(nextNodeId) || 0) + 1;
-        session.nodeRetryCount?.set(nextNodeId, retryCount);
+      if (validationCheck && !validationCheck.check(result)) {
+        // Invalid: retry (go back to retryTargetNodeId or previous node)
+        const retryTargetNodeId = validationCheck.retryTargetNodeId || 
+          (currentState.currentStepIndex > 0 
+            ? currentState.steps[currentState.currentStepIndex - 1].nodeId 
+            : null);
         
-        const maxRetries = 3; // Maximum number of retries per node
-        if (retryCount > maxRetries) {
-          state.status = "error";
-          state.error = `Maximum retry limit (${maxRetries}) exceeded for node: ${nextNodeId}`;
+        if (!retryTargetNodeId) {
+          // No node to go back to
+          currentState.status = "error";
+          currentState.error = "Validation failed and no node to retry";
+          flow.setStatus("error");
           break;
         }
-      } else if (session && nextIndex > state.currentStepIndex) {
-        // Moving forward, reset retry count for the next node
-        session.nodeRetryCount?.set(nextNodeId, 0);
+
+        // Check retry count
+        if (session) {
+          const retryCount = (session.nodeRetryCount?.get(step.nodeId) || 0) + 1;
+          session.nodeRetryCount?.set(step.nodeId, retryCount);
+          
+          const maxRetries = validationCheck.maxRetries || 3;
+          if (retryCount > maxRetries) {
+            // Out of retries: reject workflow
+            currentState.status = "error";
+            currentState.error = `Validation failed after ${maxRetries} retries`;
+            flow.setStatus("error");
+            break;
+          }
+        }
+
+        // Go back to retry target node
+        const retryIndex = currentState.steps.findIndex((s) => s.nodeId === retryTargetNodeId);
+        if (retryIndex === -1) {
+          currentState.status = "error";
+          currentState.error = `Retry target node not found: ${retryTargetNodeId}`;
+          flow.setStatus("error");
+          break;
+        }
+
+        // Reset the retry target step
+        const retryStep = currentState.steps[retryIndex];
+        if (retryStep) {
+          retryStep.executed = false;
+          retryStep.result = undefined;
+        }
+
+        flow.setCurrentStepIndex(retryIndex);
+        sessionManager.updateSession(sessionId, { status: "running" });
+        continue; // Retry from the target node
       }
 
-      state.currentStepIndex = nextIndex;
+      // STEP 2: Check for operations (if node has operations, pause and wait for user)
+      const nodeOperations = flowConfig.nodeOperations?.[step.nodeId];
+      
+      if (nodeOperations && nodeOperations.length > 0) {
+        // Pause workflow and wait for user operation
+        currentState.status = "waiting-operation";
+        flow.setStatus("waiting-operation");
+        sessionManager.updateSession(sessionId, {
+          status: "waiting-operation",
+          waitingForOperation: {
+            stepIndex: currentState.currentStepIndex,
+            nodeId: step.nodeId,
+            result,
+            operations: nodeOperations,
+          },
+        });
+
+        const operationEvent: FlowEvent = {
+          type: "operation-required",
+          flowId: flowConfig.id,
+          stepIndex: currentState.currentStepIndex,
+          nodeId: step.nodeId,
+          data: result.output,
+          operations: nodeOperations,
+        };
+        yield operationEvent;
+        onEvent?.(operationEvent);
+        
+        const statusEvent: FlowEvent = {
+          type: "status-change",
+          flowId: flowConfig.id,
+          status: "waiting-operation",
+          data: { sessionId, state: currentState },
+        };
+        yield statusEvent;
+        onEvent?.(statusEvent);
+        
+        // Return and wait for user operation (confirm/reject/restart)
+        return currentState;
+      }
+
+      // STEP 3: No validation check failed and no operations - continue to next node
+      currentState = flow.getState();
+      const nextNodeId = getNextNodeId(flowConfig, step.nodeId, result, currentState);
+
+      if (nextNodeId === null) {
+        currentState.status = "completed";
+        flow.setStatus("completed");
+        break;
+      }
+
+      const nextIndex = currentState.steps.findIndex((s) => s.nodeId === nextNodeId);
+      if (nextIndex === -1) {
+        currentState.status = "error";
+        currentState.error = `Next node not found: ${nextNodeId}`;
+        flow.setStatus("error");
+        break;
+      }
+
+      // Reset retry count when moving forward
+      if (session && nextIndex > currentState.currentStepIndex) {
+        session.nodeRetryCount?.set(step.nodeId, 0);
+      }
+
+      flow.setCurrentStepIndex(nextIndex);
+      // Will get fresh state on next iteration
     }
+
+    // Get final state
+    const finalState = flow.getState();
 
     // Emit final status with state
     const finalEvent: FlowEvent = {
       type: "status-change",
       flowId: flowConfig.id,
-      status: state.status,
-      data: { sessionId, state },
+      status: finalState.status,
+      data: { sessionId, state: finalState },
     };
     yield finalEvent;
     onEvent?.(finalEvent);
 
-    sessionManager.updateSession(sessionId, { status: state.status });
+    // Update session status
+    if (finalState.status !== "waiting-operation") {
+      sessionManager.updateSession(sessionId, { status: finalState.status });
+      
+      // Clean up session immediately when workflow completes or errors
+      // No need to keep completed/error sessions around
+      // Cleanup happens after generator returns, so response is already sent to client
+      if (finalState.status === "completed" || finalState.status === "error") {
+        sessionManager.cleanupSession(sessionId);
+      }
+    }
 
-    return state;
+    return finalState;
   } catch (error) {
-    state.status = "error";
-    state.error = error instanceof Error ? error.message : "Unknown error";
+    const errorState = flow.getState();
+    errorState.status = "error";
+    errorState.error = error instanceof Error ? error.message : "Unknown error";
+    flow.setStatus("error");
 
     const errorEvent: FlowEvent = {
       type: "step-error",
       flowId: flowConfig.id,
-      error: state.error,
+      error: errorState.error,
     };
     yield errorEvent;
     onEvent?.(errorEvent);
 
     sessionManager.updateSession(sessionId, { status: "error" });
-    return state;
+    
+    // Clean up session immediately when workflow errors
+    // Cleanup happens after generator returns, so error event is already sent to client
+    sessionManager.cleanupSession(sessionId);
+    
+    return errorState;
   }
 }
 
 /**
- * Control flow execution (pause, resume, confirm, etc.)
+ * Execute a flow from start or from a specific step
+ * 
+ * General workflow feature: Can start any workflow at any step
+ * - If startIndex is provided, starts execution from that step (for extend/retry)
+ * - If partialState is provided in initialContext._partialState, nodes can reference previous workflow
+ * - The node at startIndex receives initialContext.input and can optionally use _partialState
+ * 
+ * This enables:
+ * - Extend: Go back to a previous node with new input
+ * - Retry: Retry from a previous node
+ * - Future general API: `/api/back/workflow/node` that can start any workflow at any step
+ */
+export async function* executeFlowStream(
+  flowConfig: FlowConfig,
+  initialContext: NodeContext,
+  onEvent?: (event: FlowEvent) => void,
+  startIndex?: number
+): AsyncGenerator<FlowEvent, FlowState, unknown> {
+  const flow = new Flow(flowConfig, initialContext);
+  const sessionId = sessionManager.createSession(flow, initialContext);
+
+  const state = flow.getState();
+  state.sessionId = sessionId;
+
+  // If startIndex is provided, start execution from that step (general workflow feature)
+  // This is used by extend, retry, or any action that needs to restart at a specific step
+  if (startIndex !== undefined && startIndex >= 0 && startIndex < state.steps.length) {
+    flow.setCurrentStepIndex(startIndex);
+    state.currentStepIndex = startIndex;
+  }
+
+  // Emit initial status with session ID
+  const initialEvent: FlowEvent = {
+    type: "status-change",
+    flowId: flowConfig.id,
+    status: "running",
+    data: { sessionId, state },
+  };
+  yield initialEvent;
+  onEvent?.(initialEvent);
+
+  sessionManager.updateSession(sessionId, { status: "running", lastActivity: Date.now() });
+
+  // Use the shared execution logic
+  return yield* continueFlowExecutionStream(state, sessionId, onEvent);
+}
+
+
+/**
+ * Control flow execution (pause, resume, confirm, reject, restart)
  */
 export async function controlFlow(
   sessionId: string,
-  action: "pause" | "resume" | "confirm" | "reject" | "skip" | "retry" | "extend",
-  data?: unknown
+  action: "pause" | "resume" | "confirm" | "reject" | "restart",
+  data?: unknown,
+  operationAction?: string
 ): Promise<FlowState> {
-  const session = sessionManager.getSession(sessionId);
+  // Get session - we should always have a sessionId from the client
+  // One workflow = one session. If session doesn't exist, it was cleaned up or never created.
+  let session = sessionManager.getSession(sessionId);
+  
   if (!session) {
-    throw new Error(`Session not found: ${sessionId}`);
+    // Session not found - may have been cleaned up
+    // Note: Sessions waiting for operation or running should NEVER be cleaned up
+    // If this happens, there might be a bug in cleanup logic
+    throw new Error(
+      `Session not found: ${sessionId}. The session may have been cleaned up. Please start a new workflow.`
+    );
+  }
+  
+  // CRITICAL: Update lastActivity IMMEDIATELY to prevent cleanup
+  // This must happen before any other operations to ensure session stays alive
+  // Also protects the session during restart/resume gap
+  sessionManager.updateSession(sessionId, { lastActivity: Date.now() });
+  
+  // Re-fetch session after update to ensure we have latest state
+  session = sessionManager.getSession(sessionId);
+  if (!session) {
+    // Should never happen, but double-check
+    throw new Error(`Session ${sessionId} was deleted during operation`);
   }
 
   const flow = session.flow;
-  const state = flow.getState();
+  let state = flow.getState();
 
   switch (action) {
     case "pause":
@@ -622,152 +753,176 @@ export async function controlFlow(
     case "resume":
       if (
         state.status === "paused" ||
-        state.status === "waiting-confirmation"
+        state.status === "waiting-operation"
       ) {
         flow.resume();
         sessionManager.updateSession(sessionId, { status: "running" });
-        // Continue execution
-        await continueFlowExecution(sessionId);
+        // Execution will be resumed by client via /api/flow/execute with sessionId
       }
       break;
 
     case "confirm":
+      // Confirm: resume workflow to next node
       if (
-        state.status === "waiting-confirmation" &&
-        session.waitingForConfirmation
+        state.status === "waiting-operation" &&
+        session.waitingForOperation &&
+        (operationAction === "confirm" || !operationAction)
       ) {
-        // User confirmed, proceed to next step (dialog-audio for dialog-check)
-        const currentNodeId = session.waitingForConfirmation.nodeId;
-        if (currentNodeId === "dialog-check") {
-          // Find dialog-audio node
-          const dialogAudioIndex = state.steps.findIndex((s) => s.nodeId === "dialog-audio");
-          if (dialogAudioIndex !== -1) {
-            state.currentStepIndex = dialogAudioIndex;
-          } else {
-            state.currentStepIndex++;
-          }
+        // Find next node using condition system
+        const currentNodeId = session.waitingForOperation.nodeId;
+        const result = session.waitingForOperation.result;
+        
+        // Get next node ID
+        const nextNodeId = getNextNodeId(state.config, currentNodeId, result, state);
+        
+        if (nextNodeId === null) {
+          // No next node - workflow completed
+          flow.setStatus("completed");
+          sessionManager.updateSession(sessionId, {
+            status: "completed",
+            waitingForOperation: undefined,
+          });
+          
+          // Clean up session immediately when workflow completes
+          // Cleanup happens after controlFlow returns, so state is already sent to client
+          sessionManager.cleanupSession(sessionId);
         } else {
-          state.currentStepIndex++;
+          const nextIndex = state.steps.findIndex((s) => s.nodeId === nextNodeId);
+          if (nextIndex !== -1) {
+            flow.setCurrentStepIndex(nextIndex);
+            flow.setStatus("running");
+            sessionManager.updateSession(sessionId, {
+              status: "running",
+              waitingForOperation: undefined,
+            });
+          } else {
+            flow.setStatus("error");
+            flow.setError(`Next node not found: ${nextNodeId}`);
+            sessionManager.updateSession(sessionId, {
+              status: "error",
+              waitingForOperation: undefined,
+            });
+          }
         }
-        state.status = "running";
-        sessionManager.updateSession(sessionId, {
-          status: "running",
-          waitingForConfirmation: undefined,
-        });
-        // Continue execution
-        await continueFlowExecution(sessionId);
+        state = flow.getState();
       }
       break;
 
     case "reject":
-      if (state.status === "waiting-confirmation") {
-        // User rejected, go back or stop
-        state.status = "error";
-        state.error = "User rejected the result";
+      // Reject: stop workflow with error
+      if (state.status === "waiting-operation") {
+        flow.setStatus("error");
+        flow.setError("User rejected the result");
         sessionManager.updateSession(sessionId, {
           status: "error",
-          waitingForConfirmation: undefined,
+          waitingForOperation: undefined,
         });
+        state = flow.getState();
+        
+        // Clean up session immediately when rejected
+        // Cleanup happens after controlFlow returns, so state is already sent to client
+        sessionManager.cleanupSession(sessionId);
       }
       break;
 
-    case "skip":
-      if (state.status === "waiting-confirmation") {
-        // Skip confirmation, proceed
-        state.currentStepIndex++;
-        state.status = "running";
-        sessionManager.updateSession(sessionId, {
-          status: "running",
-          waitingForConfirmation: undefined,
-        });
-        await continueFlowExecution(sessionId);
-      }
-      break;
+    case "restart":
+      // Restart: go back to a certain node (don't close session & workflow)
+      // Just move currentStepIndex back to that node, then continue from there
+      if (
+        state.status === "waiting-operation" &&
+        session.waitingForOperation
+      ) {
+        const operation = session.waitingForOperation.operations.find(
+          (op) => op.action === (operationAction || "restart")
+        );
 
-    case "retry":
-      if (state.status === "error" || state.status === "waiting-confirmation") {
-        // Retry current step
-        const currentStep = state.steps[state.currentStepIndex];
-        if (currentStep) {
-          currentStep.executed = false;
-          currentStep.result = undefined;
-        }
-        state.status = "running";
-        sessionManager.updateSession(sessionId, {
-          status: "running",
-          waitingForConfirmation: undefined,
-        });
-        await continueFlowExecution(sessionId);
-      }
-      break;
-
-    case "extend":
-      if (state.status === "waiting-confirmation" && session.waitingForConfirmation) {
-        // User wants to extend the dialog
-        // Find dialog-generation node index
-        const dialogGenIndex = state.steps.findIndex((s) => s.nodeId === "dialog-generation");
-        if (dialogGenIndex === -1) {
-          state.status = "error";
-          state.error = "Dialog generation node not found";
+        if (!operation || !operation.handler) {
+          flow.setStatus("error");
+          flow.setError("Restart operation handler not found");
           sessionManager.updateSession(sessionId, {
             status: "error",
-            waitingForConfirmation: undefined,
+            waitingForOperation: undefined,
           });
-          break;
+          return flow.getState();
         }
 
-        // Get the actual dialog from dialog-generation step (not from dialog-check)
-        const dialogGenStep = state.steps[dialogGenIndex];
-        const currentDialogResult = dialogGenStep?.result?.output;
-        const userExtensionInput = data as string | undefined;
+        // Get user input for restart (e.g., extension request)
+        const userInput = data as string | undefined;
 
-        if (!currentDialogResult) {
-          state.status = "error";
-          state.error = "No dialog found to extend";
+        // Call handler to get target node ID
+        const targetNodeId = operation.handler(session.waitingForOperation.result, userInput);
+
+        if (!targetNodeId) {
+          flow.setStatus("error");
+          flow.setError("Restart handler returned no target node");
           sessionManager.updateSession(sessionId, {
             status: "error",
-            waitingForConfirmation: undefined,
+            waitingForOperation: undefined,
           });
-          break;
+          return flow.getState();
         }
 
-        // Get original analysis from dialog-analysis step to preserve context
-        const dialogAnalysisIndex = state.steps.findIndex((s) => s.nodeId === "dialog-analysis");
-        const originalAnalysis = dialogAnalysisIndex !== -1 
-          ? state.steps[dialogAnalysisIndex]?.result?.output 
-          : null;
-
-        // Combine current dialog with user's extension input and original analysis
-        // Update context to pass all info to dialog-generation
-        const extendedInput = {
-          previousDialog: currentDialogResult,
-          extensionRequest: userExtensionInput || "Please extend this dialog",
-          ...(originalAnalysis ? { originalAnalysis } : {}),
-        };
-
-        // Reset dialog-generation step
-        if (dialogGenStep) {
-          dialogGenStep.executed = false;
-          dialogGenStep.result = undefined;
+        // Find target node index
+        const targetIndex = state.steps.findIndex((s) => s.nodeId === targetNodeId);
+        
+        if (targetIndex === -1) {
+          flow.setStatus("error");
+          flow.setError(`Target node not found: ${targetNodeId}`);
+          sessionManager.updateSession(sessionId, {
+            status: "error",
+            waitingForOperation: undefined,
+          });
+          return flow.getState();
         }
 
-        // Update context with extended input
-        flow.updateContext({ input: extendedInput });
+        // If user input provided, update context for the target node
+        if (userInput && targetIndex < state.currentStepIndex) {
+          // Going back - update context with user input
+          // The target node will receive this input on next execution
+          const currentNodeId = session.waitingForOperation.nodeId;
+          
+          // For dialog-check restart -> dialog-generation, prepare context
+          if (targetNodeId === "dialog-generation" && currentNodeId === "dialog-check") {
+            // Get previous dialog generation output
+            const dialogGenStep = state.steps.find((s) => s.nodeId === "dialog-generation");
+            const previousDialog = dialogGenStep?.result?.output;
+            
+            if (previousDialog) {
+              // Update context for dialog-generation with extension input
+              flow.updateContext({
+                input: {
+                  previousDialog,
+                  extensionRequest: userInput,
+                },
+                previousOutput: previousDialog,
+              });
+            }
+          }
+        }
 
-        // Go back to dialog-generation
-        state.currentStepIndex = dialogGenIndex;
-        state.status = "running";
+        // Reset the target step and move back to it
+        const targetStep = state.steps[targetIndex];
+        if (targetStep) {
+          targetStep.executed = false;
+          targetStep.result = undefined;
+        }
+
+        flow.setCurrentStepIndex(targetIndex);
+        flow.setStatus("running");
         sessionManager.updateSession(sessionId, {
           status: "running",
-          waitingForConfirmation: undefined,
+          waitingForOperation: undefined,
         });
-        await continueFlowExecution(sessionId);
+
+        // Execution will be resumed by client via /api/flow/execute with sessionId
+        state = flow.getState();
       }
       break;
   }
 
   return flow.getState();
 }
+
 
 /**
  * Continue flow execution after pause/resume/confirm
@@ -820,10 +975,16 @@ async function continueFlowExecution(sessionId: string): Promise<void> {
 
 /**
  * Get flow state
+ * Also updates lastActivity to keep session alive
+ * CRITICAL: This is called by execute route to check if session exists before resuming
+ * MUST update lastActivity to prevent cleanup
  */
 export function getFlowState(sessionId: string): FlowState | null {
   const session = sessionManager.getSession(sessionId);
   if (!session) return null;
+  // CRITICAL: Update lastActivity IMMEDIATELY to prevent cleanup
+  // This is called when client tries to resume - must keep session alive
+  sessionManager.updateSession(sessionId, { lastActivity: Date.now() });
   return session.flow.getState();
 }
 

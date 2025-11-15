@@ -61,9 +61,24 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, data: response });
   } catch (error) {
+    let errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    
+    // Sanitize error message to remove any potential API key exposure
+    const cookieApiKey = request.cookies.get(COOKIE_NAME)?.value;
+    if (cookieApiKey) {
+      errorMessage = errorMessage.replace(
+        new RegExp(cookieApiKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'),
+        '[API_KEY_HIDDEN]'
+      );
+      errorMessage = errorMessage.replace(
+        /sk-[a-zA-Z0-9]{20,}/g,
+        '[API_KEY_HIDDEN]'
+      );
+    }
+    
     return NextResponse.json(
       {
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: errorMessage,
       },
       { status: 500 }
     );
@@ -119,7 +134,7 @@ export async function callLLMAPI(
     };
   } else {
     body = {
-      model: model || (provider === 'deepseek' ? 'deepseek-chat' : 'gpt-4'),
+      model: model || (provider === 'deepseek' ? 'deepseek-chat' : 'gpt-3.5-turbo'),
       messages,
       ...(temperature !== undefined && { temperature }),
       ...(maxTokens !== undefined && { max_tokens: maxTokens }),
@@ -148,7 +163,25 @@ export async function callLLMAPI(
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`LLM API error: ${response.status} ${errorText}`);
+    // Sanitize error message to remove any potential API key exposure
+    let sanitizedError = errorText;
+    if (apiKey) {
+      // Remove API key from error message if it appears
+      sanitizedError = sanitizedError.replace(
+        new RegExp(apiKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'),
+        '[API_KEY_HIDDEN]'
+      );
+      // Also remove common API key patterns
+      sanitizedError = sanitizedError.replace(
+        /sk-[a-zA-Z0-9]{20,}/g,
+        '[API_KEY_HIDDEN]'
+      );
+      sanitizedError = sanitizedError.replace(
+        /Bearer\s+sk-[a-zA-Z0-9]{20,}/g,
+        'Bearer [API_KEY_HIDDEN]'
+      );
+    }
+    throw new Error(`LLM API error: ${response.status} ${sanitizedError}`);
   }
 
   const data = await response.json();

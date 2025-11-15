@@ -115,7 +115,19 @@ export async function generateAudioWithOpenAI(
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`OpenAI TTS error: ${response.status} ${errorText}`);
+    // Sanitize error message to remove any potential API key exposure
+    let sanitizedError = errorText;
+    if (apiKey) {
+      sanitizedError = sanitizedError.replace(
+        new RegExp(apiKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'),
+        '[API_KEY_HIDDEN]'
+      );
+      sanitizedError = sanitizedError.replace(
+        /sk-[a-zA-Z0-9]{20,}/g,
+        '[API_KEY_HIDDEN]'
+      );
+    }
+    throw new Error(`OpenAI TTS error: ${response.status} ${sanitizedError}`);
   }
 
   const audioBuffer = await response.arrayBuffer();
@@ -158,7 +170,15 @@ export async function generateAudioWithElevenLabs(
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`ElevenLabs TTS error: ${response.status} ${errorText}`);
+    // Sanitize error message
+    let sanitizedError = errorText;
+    if (apiKey) {
+      sanitizedError = sanitizedError.replace(
+        new RegExp(apiKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'),
+        '[API_KEY_HIDDEN]'
+      );
+    }
+    throw new Error(`ElevenLabs TTS error: ${response.status} ${sanitizedError}`);
   }
 
   const audioBuffer = await response.arrayBuffer();
@@ -200,7 +220,15 @@ export async function generateAudioWithCustom(
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Custom TTS error: ${response.status} ${errorText}`);
+    // Sanitize error message
+    let sanitizedError = errorText;
+    if (config.apiKey) {
+      sanitizedError = sanitizedError.replace(
+        new RegExp(config.apiKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'),
+        '[API_KEY_HIDDEN]'
+      );
+    }
+    throw new Error(`Custom TTS error: ${response.status} ${sanitizedError}`);
   }
 
   // Assume custom API returns audio in response body

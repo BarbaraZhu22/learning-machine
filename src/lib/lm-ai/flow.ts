@@ -418,7 +418,7 @@ export function createSimulateDialogFlow(
     {
       type: "dialog-analysis",
       provider: llmConfig?.provider || "deepseek",
-      apiKey: llmConfig?.apiKey,
+      // apiKey is never stored in config - it's passed at execution time from cookies
       apiUrl: llmConfig?.apiUrl,
       model: llmConfig?.model,
       systemPrompt:
@@ -438,7 +438,7 @@ export function createSimulateDialogFlow(
     {
       type: "dialog-generation",
       provider: llmConfig?.provider || "deepseek",
-      apiKey: llmConfig?.apiKey,
+      // apiKey is never stored in config - it's passed at execution time from cookies
       apiUrl: llmConfig?.apiUrl,
       model: llmConfig?.model,
       systemPrompt:
@@ -458,7 +458,7 @@ export function createSimulateDialogFlow(
     {
       type: "dialog-check",
       provider: llmConfig?.provider || "deepseek",
-      apiKey: llmConfig?.apiKey,
+      // apiKey is never stored in config - it's passed at execution time from cookies
       apiUrl: llmConfig?.apiUrl,
       model: llmConfig?.model,
       systemPrompt:
@@ -525,7 +525,7 @@ export function createSimulateDialogFlow(
     {
       type: "dialog-audio",
       provider: llmConfig?.provider || "deepseek",
-      apiKey: llmConfig?.apiKey,
+      // apiKey is never stored in config - it's passed at execution time from cookies
       apiUrl: llmConfig?.apiUrl,
       model: llmConfig?.model,
       systemPrompt:
@@ -638,7 +638,7 @@ export function createExtendVocabularyFlow(
     {
       type: "extension-analysis",
       provider: llmConfig?.provider || "deepseek",
-      apiKey: llmConfig?.apiKey,
+      // apiKey is never stored in config - it's passed at execution time from cookies
       apiUrl: llmConfig?.apiUrl,
       model: llmConfig?.model,
       systemPrompt:
@@ -657,7 +657,7 @@ export function createExtendVocabularyFlow(
     {
       type: "extension-check",
       provider: llmConfig?.provider || "deepseek",
-      apiKey: llmConfig?.apiKey,
+      // apiKey is never stored in config - it's passed at execution time from cookies
       apiUrl: llmConfig?.apiUrl,
       model: llmConfig?.model,
       systemPrompt:
@@ -676,7 +676,7 @@ export function createExtendVocabularyFlow(
     {
       type: "extension-relationship-analysis",
       provider: llmConfig?.provider || "deepseek",
-      apiKey: llmConfig?.apiKey,
+      // apiKey is never stored in config - it's passed at execution time from cookies
       apiUrl: llmConfig?.apiUrl,
       model: llmConfig?.model,
       systemPrompt:
@@ -695,7 +695,7 @@ export function createExtendVocabularyFlow(
     {
       type: "extension-relationship-check",
       provider: llmConfig?.provider || "deepseek",
-      apiKey: llmConfig?.apiKey,
+      // apiKey is never stored in config - it's passed at execution time from cookies
       apiUrl: llmConfig?.apiUrl,
       model: llmConfig?.model,
       systemPrompt:
@@ -755,7 +755,7 @@ export function createSimpleChatFlow(llmConfig?: {
     {
       type: "chat-response",
       provider: llmConfig?.provider || "deepseek",
-      apiKey: llmConfig?.apiKey,
+      // apiKey is never stored in config - it's passed at execution time from cookies
       apiUrl: llmConfig?.apiUrl,
       model: llmConfig?.model,
       systemPrompt: "You are a helpful assistant.",

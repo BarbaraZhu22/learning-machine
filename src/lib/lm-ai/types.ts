@@ -69,7 +69,8 @@ export interface PreNodeConfig {
 export interface LLMNodeConfig {
   type: LLMNodeType;
   provider?: LLMProvider;
-  apiKey?: string;
+  // apiKey is NEVER stored in config - it's passed at execution time from cookies
+  // apiKey?: string; // REMOVED - never store API keys in configs
   apiUrl?: string;
   model?: string;
   temperature?: number;

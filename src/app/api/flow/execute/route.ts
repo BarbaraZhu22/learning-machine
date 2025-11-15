@@ -159,34 +159,12 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Apply user-provided AI config to all LLM nodes
-    // Note: apiKey is now read from cookie, not from request body
-    if (body.aiConfig) {
-      flowConfig.nodes.forEach((node) => {
-        if (node.nodeType === "llm") {
-          node.config.provider = body.aiConfig!.provider as
-            | "deepseek"
-            | "openai"
-            | "anthropic"
-            | "custom";
-          // Use API key from cookie if available, otherwise fall back to env vars
-          node.config.apiKey = cookieApiKey;
-          if (body.aiConfig!.apiUrl) {
-            node.config.apiUrl = body.aiConfig!.apiUrl;
-          }
-          if (body.aiConfig!.model) {
-            node.config.model = body.aiConfig!.model;
-          }
-        }
-      });
-    } else if (cookieApiKey) {
-      // If no aiConfig provided but cookie exists, apply cookie to all LLM nodes
-      flowConfig.nodes.forEach((node) => {
-        if (node.nodeType === "llm") {
-          node.config.apiKey = cookieApiKey;
-        }
-      });
-    }
+    // Extract API credentials from request (cookie + aiConfig)
+    // NEVER store apiKey in node configs - pass it to executeFlowStream instead
+    const apiKey = cookieApiKey;
+    const providerOverride = body.aiConfig?.provider;
+    const modelOverride = body.aiConfig?.model;
+    const apiUrlOverride = body.aiConfig?.apiUrl;
 
     // Start NEW workflow (no sessionId provided)
     // If partialState/startIndex are provided, this is restarting from a previous workflow
@@ -210,11 +188,16 @@ export async function POST(request: NextRequest) {
         try {
           // If startIndex is provided, start execution from that step (for extend/retry)
           // This is a general workflow feature - can start any workflow at any step
+          // Pass API credentials directly - never store in node configs
           for await (const event of executeFlowStream(
             flowConfig,
             nodeContext,
             undefined,
-            startIndex
+            startIndex,
+            apiKey,
+            providerOverride,
+            modelOverride,
+            apiUrlOverride
           )) {
             const data = JSON.stringify(event) + "\n";
             controller.enqueue(encoder.encode(`data: ${data}\n\n`));
@@ -222,8 +205,26 @@ export async function POST(request: NextRequest) {
 
           controller.close();
         } catch (error) {
-          const errorMessage =
+          let errorMessage =
             error instanceof Error ? error.message : "Unknown error";
+          
+          // Sanitize error message to remove any potential API key exposure
+          const cookieApiKey = request.cookies.get(COOKIE_NAME)?.value;
+          if (cookieApiKey) {
+            errorMessage = errorMessage.replace(
+              new RegExp(cookieApiKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'),
+              '[API_KEY_HIDDEN]'
+            );
+            errorMessage = errorMessage.replace(
+              /sk-[a-zA-Z0-9]{20,}/g,
+              '[API_KEY_HIDDEN]'
+            );
+            errorMessage = errorMessage.replace(
+              /Bearer\s+sk-[a-zA-Z0-9]{20,}/g,
+              'Bearer [API_KEY_HIDDEN]'
+            );
+          }
+          
           // Check if it's an API key missing error
           const isApiKeyMissing =
             errorMessage.includes("API key") ||

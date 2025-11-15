@@ -15,7 +15,7 @@ const providerOptions: { value: LLMProvider; label: string }[] = [
 
 const defaultModels: Record<LLMProvider, string> = {
   deepseek: "deepseek-chat",
-  openai: "gpt-4",
+  openai: "gpt-3.5-turbo",
   anthropic: "claude-3-5-sonnet-20241022",
   custom: "",
 };

@@ -237,9 +237,24 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Audio generation error:', error);
+    let errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    
+    // Sanitize error message to remove any potential API key exposure
+    const apiKey = request.cookies.get(COOKIE_NAME)?.value;
+    if (apiKey) {
+      errorMessage = errorMessage.replace(
+        new RegExp(apiKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'),
+        '[API_KEY_HIDDEN]'
+      );
+      errorMessage = errorMessage.replace(
+        /sk-[a-zA-Z0-9]{20,}/g,
+        '[API_KEY_HIDDEN]'
+      );
+    }
+    
     return NextResponse.json(
       {
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: errorMessage,
         fallback: 'browser',
       },
       { status: 500 }

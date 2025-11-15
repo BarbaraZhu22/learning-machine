@@ -91,6 +91,34 @@ export function getSessionManager(): FlowSessionManager {
   return sessionManager;
 }
 
+/**
+ * Sanitize flow state to remove API keys from node configs before sending to client
+ */
+function sanitizeFlowState(state: FlowState): FlowState {
+  const sanitized = JSON.parse(JSON.stringify(state)); // Deep clone
+  // Remove apiKey from all LLM node configs
+  if (sanitized.config?.nodes) {
+    sanitized.config.nodes = sanitized.config.nodes.map((node: any) => {
+      if (node.nodeType === 'llm' && node.config) {
+        const { apiKey, ...restConfig } = node.config;
+        return { ...node, config: restConfig };
+      }
+      return node;
+    });
+  }
+  // Also sanitize steps
+  if (sanitized.steps) {
+    sanitized.steps = sanitized.steps.map((step: any) => {
+      if (step.node?.nodeType === 'llm' && step.node.config) {
+        const { apiKey, ...restConfig } = step.node.config;
+        return { ...step, node: { ...step.node, config: restConfig } };
+      }
+      return step;
+    });
+  }
+  return sanitized;
+}
+
 // No interval cleanup needed - sessions are cleaned up immediately when:
 // 1. Workflow completes (status = "completed")
 // 2. Workflow errors (status = "error") 
@@ -103,10 +131,17 @@ export function getSessionManager(): FlowSessionManager {
  */
 async function* executeLLMNodeWithStreaming(
   node: LLMNode,
-  context: NodeContext
+  context: NodeContext,
+  apiKey?: string,
+  providerOverride?: string,
+  modelOverride?: string,
+  apiUrlOverride?: string
 ): AsyncGenerator<{ type: "chunk" | "result"; data: string | NodeResult }> {
   try {
-    const provider = node.config.provider || "deepseek";
+    // Use override values if provided, otherwise fall back to node config (but never use apiKey from config)
+    const provider = providerOverride || node.config.provider || "deepseek";
+    const model = modelOverride || node.config.model;
+    const apiUrl = apiUrlOverride || node.config.apiUrl;
     const input = context.input;
     const previousOutput = context.previousOutput;
 
@@ -123,13 +158,13 @@ async function* executeLLMNodeWithStreaming(
       context
     );
 
-    // Call LLM API with streaming
+    // Call LLM API with streaming - apiKey must be provided as parameter, never from config
     let fullResponse = "";
     for await (const chunk of callLLMAPIStreaming({
       provider,
-      apiKey: node.config.apiKey,
-      apiUrl: node.config.apiUrl,
-      model: node.config.model,
+      apiKey, // Only use parameter, never from node.config
+      apiUrl,
+      model,
       messages,
       temperature: node.config.temperature,
       maxTokens: node.config.maxTokens,
@@ -209,7 +244,7 @@ async function* callLLMAPIStreaming(
     };
   } else {
     body = {
-      model: model || (provider === "deepseek" ? "deepseek-chat" : "gpt-4"),
+      model: model || (provider === "deepseek" ? "deepseek-chat" : "gpt-3.5-turbo"),
       messages,
       ...(temperature !== undefined && { temperature }),
       ...(maxTokens !== undefined && { max_tokens: maxTokens }),
@@ -241,7 +276,23 @@ async function* callLLMAPIStreaming(
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`LLM API error: ${response.status} ${errorText}`);
+    // Sanitize error message to remove any potential API key exposure
+    let sanitizedError = errorText;
+    if (apiKey) {
+      sanitizedError = sanitizedError.replace(
+        new RegExp(apiKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'),
+        '[API_KEY_HIDDEN]'
+      );
+      sanitizedError = sanitizedError.replace(
+        /sk-[a-zA-Z0-9]{20,}/g,
+        '[API_KEY_HIDDEN]'
+      );
+      sanitizedError = sanitizedError.replace(
+        /Bearer\s+sk-[a-zA-Z0-9]{20,}/g,
+        'Bearer [API_KEY_HIDDEN]'
+      );
+    }
+    throw new Error(`LLM API error: ${response.status} ${sanitizedError}`);
   }
 
   // Handle streaming response
@@ -317,6 +368,7 @@ export async function* resumeFlowStream(
   const state = flow.getState();
 
   // Continue execution from current step
+  // API credentials are already stored in session from executeFlowStream
   return yield* continueFlowExecutionStream(state, sessionId, onEvent);
 }
 
@@ -333,6 +385,12 @@ async function* continueFlowExecutionStream(
     throw new Error(`Session not found: ${sessionId}`);
   }
 
+  // Get API credentials from session (not from node configs)
+  const apiKey = (session as any).__apiKey;
+  const providerOverride = (session as any).__provider;
+  const modelOverride = (session as any).__model;
+  const apiUrlOverride = (session as any).__apiUrl;
+
   const flow = session.flow;
   const flowConfig = state.config;
 
@@ -341,12 +399,13 @@ async function* continueFlowExecutionStream(
     // This is important because the state parameter might be stale
     let currentState = flow.getState();
     
-    // Emit status change to indicate resuming
+    // Emit status change to indicate resuming (sanitize before sending)
+    const sanitizedResumeState = sanitizeFlowState(currentState);
     const resumeEvent: FlowEvent = {
       type: "status-change",
       flowId: flowConfig.id,
       status: "running",
-      data: { sessionId, state: currentState },
+      data: { sessionId, state: sanitizedResumeState },
     };
     yield resumeEvent;
     onEvent?.(resumeEvent);
@@ -371,25 +430,36 @@ async function* continueFlowExecutionStream(
 
       // Operations are checked after node execution, not before
 
-      // Emit step start with state
+      // Emit step start with state (sanitize before sending)
+      const sanitizedState = sanitizeFlowState(currentState);
       const stepStartEvent: FlowEvent = {
         type: "step-start",
         flowId: flowConfig.id,
         stepIndex: currentState.currentStepIndex,
         nodeId: step.nodeId,
-        data: { sessionId, state: currentState },
+        data: { sessionId, state: sanitizedState },
       };
       yield stepStartEvent;
       onEvent?.(stepStartEvent);
 
       // Execute node with streaming support for LLM nodes
       let result: NodeResult;
-      if (step.node.nodeType === "llm") {
+      const node = step.node;
+      if (node.nodeType === "llm") {
         // Execute LLM node with streaming - yield chunks immediately
+        // apiKey/provider/model/apiUrl are passed from executeFlowStream, never from node.config
         let finalResult: NodeResult | null = null;
 
         // Stream chunks and yield them immediately
-        for await (const item of executeLLMNodeWithStreaming(step.node, currentState.context)) {
+        // Get API credentials from session (not from node config)
+        for await (const item of executeLLMNodeWithStreaming(
+          node, 
+          currentState.context,
+          apiKey,
+          providerOverride,
+          modelOverride,
+          apiUrlOverride
+        )) {
           if (item.type === "chunk") {
             // Yield stream-chunk events immediately for real-time streaming
             const streamEvent: FlowEvent = {
@@ -412,7 +482,7 @@ async function* continueFlowExecutionStream(
         result = finalResult;
       } else {
         // Execute non-LLM nodes normally
-        result = await step.node.execute(currentState.context);
+        result = await node.execute(currentState.context);
       }
 
       // Update step result in the flow's state
@@ -479,13 +549,14 @@ async function* continueFlowExecutionStream(
       // Get fresh state after context updates (should include the step result now)
       currentState = flow.getState();
 
-      // Emit step complete with updated state
+      // Emit step complete with updated state (sanitize before sending)
+      const sanitizedCompleteState = sanitizeFlowState(currentState);
       const stepCompleteEvent: FlowEvent = {
         type: "step-complete",
         flowId: flowConfig.id,
         stepIndex: currentState.currentStepIndex,
         nodeId: step.nodeId,
-        data: { output: result.output, state: currentState },
+        data: { output: result.output, state: sanitizedCompleteState },
       };
       yield stepCompleteEvent;
       onEvent?.(stepCompleteEvent);
@@ -574,11 +645,12 @@ async function* continueFlowExecutionStream(
         yield operationEvent;
         onEvent?.(operationEvent);
         
+        const sanitizedOperationState = sanitizeFlowState(currentState);
         const statusEvent: FlowEvent = {
           type: "status-change",
           flowId: flowConfig.id,
           status: "waiting-operation",
-          data: { sessionId, state: currentState },
+          data: { sessionId, state: sanitizedOperationState },
         };
         yield statusEvent;
         onEvent?.(statusEvent);
@@ -629,12 +701,13 @@ async function* continueFlowExecutionStream(
       }
     }
 
-    // Emit final status with state
+    // Emit final status with state (sanitize before sending)
+    const sanitizedFinalState = sanitizeFlowState(finalState);
     const finalEvent: FlowEvent = {
       type: "status-change",
       flowId: flowConfig.id,
       status: finalState.status,
-      data: { sessionId, state: finalState },
+      data: { sessionId, state: sanitizedFinalState },
     };
     yield finalEvent;
     onEvent?.(finalEvent);
@@ -693,10 +766,23 @@ export async function* executeFlowStream(
   flowConfig: FlowConfig,
   initialContext: NodeContext,
   onEvent?: (event: FlowEvent) => void,
-  startIndex?: number
+  startIndex?: number,
+  apiKey?: string,
+  providerOverride?: string,
+  modelOverride?: string,
+  apiUrlOverride?: string
 ): AsyncGenerator<FlowEvent, FlowState, unknown> {
   const flow = new Flow(flowConfig, initialContext);
   const sessionId = sessionManager.createSession(flow, initialContext);
+
+  // Store API credentials in session (not in flow state/config)
+  const session = sessionManager.getSession(sessionId);
+  if (session) {
+    (session as any).__apiKey = apiKey;
+    (session as any).__provider = providerOverride;
+    (session as any).__model = modelOverride;
+    (session as any).__apiUrl = apiUrlOverride;
+  }
 
   const state = flow.getState();
   state.sessionId = sessionId;
@@ -708,12 +794,13 @@ export async function* executeFlowStream(
     state.currentStepIndex = startIndex;
   }
 
-  // Emit initial status with session ID
+  // Emit initial status with session ID (sanitize state before sending)
+  const sanitizedState = sanitizeFlowState(state);
   const initialEvent: FlowEvent = {
     type: "status-change",
     flowId: flowConfig.id,
     status: "running",
-    data: { sessionId, state },
+    data: { sessionId, state: sanitizedState },
   };
   yield initialEvent;
   onEvent?.(initialEvent);
@@ -955,7 +1042,12 @@ async function continueFlowExecution(sessionId: string): Promise<void> {
   // Continue from current step
   if (state.currentStepIndex < state.steps.length) {
     const step = state.steps[state.currentStepIndex];
-    const result = await step.node.execute(state.context);
+    // Get API credentials from session for non-streaming execute
+    const sessionApiKey = (session as any).__apiKey;
+    const executeContext = (step.node.nodeType === "llm" && sessionApiKey)
+      ? { ...state.context, _apiKey: sessionApiKey } as any
+      : state.context;
+    const result = await step.node.execute(executeContext);
 
     step.result = result;
     step.executed = true;

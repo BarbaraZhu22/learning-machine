@@ -100,7 +100,30 @@ export interface DialogRecord {
       learn_text: string;
     }>;
   };
-  voiceSuggestions?: Record<string, string>; // character -> voice description
+  voiceSuggestions?: Record<string, string>; // character -> voice description (natural language)
+  ssmlConfig?: {
+    characters: Record<string, {
+      voice?: {
+        gender?: 'male' | 'female' | 'neutral';
+        age?: 'child' | 'young' | 'adult' | 'elderly';
+        accent?: string;
+      };
+    }>; // character -> base voice config (same voice for all sentences)
+    sentences: Array<{
+      index: number;
+      character: string;
+      prosody?: {
+        rate?: number;
+        pitch?: number;
+        volume?: number;
+      };
+      emphasis?: 'strong' | 'moderate' | 'reduced';
+      break?: {
+        time?: number; // milliseconds
+        strength?: 'none' | 'x-weak' | 'weak' | 'medium' | 'strong' | 'x-strong';
+      };
+    }>; // per-sentence prosody and break config
+  };
   learningLanguage: LearningLanguageCode;
   createdAt: string;
   updatedAt: string;

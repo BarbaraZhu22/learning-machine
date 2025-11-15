@@ -415,6 +415,12 @@ async function* continueFlowExecutionStream(
         result = await step.node.execute(currentState.context);
       }
 
+      // Update step result in the flow's state
+      // Use the flow's setStepResult method to ensure it's set directly on the internal state
+      const stepIndex = currentState.currentStepIndex;
+      flow.setStepResult(stepIndex, result);
+      
+      // Also update local step reference for consistency (though setStepResult should handle it)
       step.result = result;
       step.executed = true;
       step.timestamp = Date.now();
@@ -470,7 +476,7 @@ async function* continueFlowExecutionStream(
         }
       }
 
-      // Get fresh state after context updates
+      // Get fresh state after context updates (should include the step result now)
       currentState = flow.getState();
 
       // Emit step complete with updated state
@@ -608,8 +614,20 @@ async function* continueFlowExecutionStream(
       // Will get fresh state on next iteration
     }
 
-    // Get final state
-    const finalState = flow.getState();
+    // Get final state - ensure all step results are included
+    // Get fresh state to ensure all step results are included
+    let finalState = flow.getState();
+    
+    // Verify all executed steps have their results
+    // This is a safety check to ensure step results weren't lost
+    for (let i = 0; i < finalState.steps.length; i++) {
+      const step = finalState.steps[i];
+      // If step was executed but has no result, something went wrong
+      // This shouldn't happen, but we check just in case
+      if (step.executed && !step.result && i <= finalState.currentStepIndex) {
+        console.warn(`Step ${i} (${step.nodeId}) was executed but has no result`);
+      }
+    }
 
     // Emit final status with state
     const finalEvent: FlowEvent = {

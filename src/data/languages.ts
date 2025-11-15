@@ -66,7 +66,8 @@ export const translations: LanguageCatalog = {
     aiCookieExpirationHint: "Auto clear after {days} days. Re-enter to renew",
     aiGetApiKey: "How to get {provider} API key",
     aiApiKeyMissing: "API key not configured",
-    aiApiKeyMissingMessage: "Please fill in your API key in AI Settings to use this feature.",
+    aiApiKeyMissingMessage:
+      "Please fill in your API key in AI Settings to use this feature.",
     clear: "Clear",
     send: "Send",
     confirm: "Confirm",
@@ -82,7 +83,8 @@ export const translations: LanguageCatalog = {
     allDialogs: "All Dialogs",
     noPreview: "No preview available",
     generateDialog: "Generate Dialog",
-    generateDialogMessage: "The workflow has completed. Would you like to save and view the dialog?",
+    generateDialogMessage:
+      "The workflow has completed. Would you like to save and view the dialog?",
     saveAndView: "Save & View",
     dialogs: "Dialogs",
     workflowStep: "Workflow Step",
@@ -91,11 +93,15 @@ export const translations: LanguageCatalog = {
     dialogName: "Dialog Name",
     enterWorkflowInput: "Enter input for {action} workflow...",
     typeMessage: "Type your message...",
-    dialogScenarioPlaceholder: "Enter dialog scenario (e.g., situation, characterA, characterB, notes)",
+    dialogScenarioPlaceholder:
+      "Enter dialog scenario (e.g., situation, characterA, characterB, notes)",
     extensionInputPlaceholder: "Enter your input...",
     extendDialogPlaceholder: "Describe how you'd like to extend the dialog...",
     footerOwner: "ZHU YU TING",
     footerRights: "All rights reserved.",
+    generating: "generating",
+    playing: "playing",
+    readAll: "read all",
   },
   zh: {
     appTitle: "学习机",
@@ -188,6 +194,9 @@ export const translations: LanguageCatalog = {
     extendDialogPlaceholder: "描述您想要如何扩展对话...",
     footerOwner: "ZHU YU TING",
     footerRights: "保留所有权利。",
+    generating: "生成中",
+    playing: "播放中",
+    readAll: "播放整段",
   },
 };
 

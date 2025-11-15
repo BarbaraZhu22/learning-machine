@@ -37,10 +37,10 @@ function DialogPage() {
     confirmationNodes: ['dialog-check'], // Pause for user confirmation
     continueOnFailure: true, // Continue with input on failure
     onEvent: (event) => {
-      console.log('Flow event:', event);
+      console.info('Flow event:', event);
     },
     onStateChange: (state) => {
-      console.log('Flow state:', state);
+      console.info('Flow state:', state);
     },
   });
 

@@ -42,9 +42,14 @@ function extractDialogData(flowState: FlowState): {
 
   // Find dialog-audio step for voice suggestions
   const audioStep = flowState.steps.find((s) => s.nodeId === "dialog-audio");
-  const voiceSuggestions = audioStep?.result?.output as
-    | DialogRecord["voiceSuggestions"]
-    | undefined;
+  const audioOutput = audioStep?.result?.output;
+
+  // Extract voice suggestions (Record<string, string>)
+  let voiceSuggestions: DialogRecord["voiceSuggestions"] | undefined;
+
+  if (audioOutput && audioOutput !== null) {
+    voiceSuggestions = audioOutput as DialogRecord["voiceSuggestions"];
+  }
 
   // Validate structure
   if (

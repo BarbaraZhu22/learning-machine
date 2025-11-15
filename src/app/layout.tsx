@@ -1,19 +1,8 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AppProviders } from "@/app/layout/AppProviders";
 import { SiteHeader } from "@/app/layout/SiteHeader";
 import { SiteFooter } from "@/app/layout/SiteFooter";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: "Learning Machine",
@@ -29,7 +18,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} min-h-screen text-surface-900 antialiased transition-colors dark:text-surface-50`}
+        className={`min-h-screen text-surface-900 antialiased transition-colors dark:text-surface-50`}
       >
         <AppProviders>
           <div className="flex min-h-screen flex-col">

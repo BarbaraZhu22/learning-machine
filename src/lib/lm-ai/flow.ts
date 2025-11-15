@@ -222,6 +222,17 @@ export class Flow {
   }
 
   /**
+   * Set step result directly on the flow's state
+   */
+  setStepResult(stepIndex: number, result: NodeResult): void {
+    if (stepIndex >= 0 && stepIndex < this.state.steps.length) {
+      this.state.steps[stepIndex].result = result;
+      this.state.steps[stepIndex].executed = true;
+      this.state.steps[stepIndex].timestamp = Date.now();
+    }
+  }
+
+  /**
    * Add or replace a node in the flow
    */
   addNode(node: Node, index?: number): void {
@@ -520,7 +531,7 @@ export function createSimulateDialogFlow(
       systemPrompt:
         "You are a language learning assistant. Analyze dialog content and generate character voice analysis. Read the learn_text (learning language text) from the dialog and suggest appropriate voices for each character.",
       userPromptTemplate:
-        'Analyze this validated dialog and generate character voice analysis:\n\n{{input}}\n\nRead the dialog and extract the characters. For each character, suggest an appropriate voice description.\n\nReturn JSON format:\n{\n  "characterAName": "voice description for character A",\n  "characterBName": "voice description for character B"\n}\n\nMake sure each character has a distinct voice description.',
+        'Analyze this validated dialog and generate character voice analysis:\n\n{{input}}\n\nFirst, extract the character names from the dialog. The dialog should have a "characters" array with the actual character names.\n\nFor each character in the dialog, suggest an appropriate voice description.\n\nReturn JSON format where the keys are the actual character names from the dialog (not "characterAName" or "characterBName"). For example, if the characters are ["顾客", "店员"], return:\n{\n  "顾客": "voice description for 顾客",\n  "店员": "voice description for 店员"\n}\n\nMake sure:\n1. Use the actual character names from the dialog\'s "characters" array as keys\n2. Each character has a distinct voice description\n3. The description is appropriate for the character\'s role and context',
       responseFormat: "json",
     },
     "Generate character voice analysis for dialog"

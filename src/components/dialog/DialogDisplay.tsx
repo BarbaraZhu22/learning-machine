@@ -1,10 +1,16 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { TypingMessageBox } from "@/components/common/TypingMessageBox";
 import { useTranslation } from "@/hooks/useTranslation";
 import type { FlowState } from "@/lib/lm-ai/types";
 import type { DialogRecord } from "@/types";
+import { useAppStore } from "@/store/useAppStore";
+import {
+  configureUtteranceFromVoiceSuggestion,
+  applySSMLToUtterance,
+  type SSMLConfig,
+} from "@/lib/lm-ai/ssml-config";
 
 interface DialogDisplayProps {
   flowState?: FlowState;
@@ -58,7 +64,23 @@ export const DialogDisplay = ({
   dialogRecord,
   onClose,
 }: DialogDisplayProps) => {
+  console.log(dialogRecord);
   const { t } = useTranslation();
+  const learningLanguage = useAppStore((state) => state.learningLanguage);
+  const aiConfig = useAppStore((state) => state.aiConfig);
+
+  // Audio state
+  const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
+  const [audioData, setAudioData] = useState<
+    Array<{ sentenceIndex: number; audioUrl: string; voiceSuggestion?: string }>
+  >([]);
+  const [currentlyReadingIndex, setCurrentlyReadingIndex] = useState<
+    number | null
+  >(null);
+  const [isPlayingAll, setIsPlayingAll] = useState(false);
+  const audioRefs = useRef<Map<number, HTMLAudioElement>>(new Map());
+  const playQueueRef = useRef<number[]>([]);
+
   const dialogData = useMemo(() => {
     if (dialogRecord) {
       return dialogRecord.dialogContent;
@@ -68,6 +90,358 @@ export const DialogDisplay = ({
     }
     return null;
   }, [flowState, dialogRecord]);
+
+  // Get SSML config and voice suggestions (legacy)
+  const ssmlConfig = useMemo(() => {
+    if (dialogRecord?.ssmlConfig) {
+      return dialogRecord.ssmlConfig;
+    }
+    // Try to extract from flowState
+    if (flowState) {
+      const audioStep = flowState.steps.find(
+        (s) => s.nodeId === "dialog-audio"
+      );
+      const audioOutput = audioStep?.result?.output;
+      if (audioOutput && typeof audioOutput === "object") {
+        // Check if it's SSML config format
+        const hasSSMLStructure = Object.values(audioOutput).some(
+          (value) =>
+            typeof value === "object" &&
+            value !== null &&
+            ("voice" in value || "prosody" in value || "emphasis" in value)
+        );
+        if (hasSSMLStructure) {
+          return audioOutput as DialogRecord["ssmlConfig"];
+        }
+      }
+    }
+    return undefined;
+  }, [dialogRecord, flowState]);
+
+  // Legacy voice suggestions (for backward compatibility)
+  const voiceSuggestions = useMemo(() => {
+    if (dialogRecord?.voiceSuggestions) {
+      return dialogRecord.voiceSuggestions;
+    }
+    // Try to extract from flowState (legacy format)
+    if (flowState) {
+      const audioStep = flowState.steps.find(
+        (s) => s.nodeId === "dialog-audio"
+      );
+      const audioOutput = audioStep?.result?.output;
+      if (audioOutput && typeof audioOutput === "object") {
+        // Check if it's legacy format (simple strings)
+        const isLegacyFormat = Object.values(audioOutput).every(
+          (value) => typeof value === "string"
+        );
+        if (isLegacyFormat) {
+          return audioOutput as DialogRecord["voiceSuggestions"];
+        }
+      }
+    }
+    return undefined;
+  }, [dialogRecord, flowState]);
+
+  // Cleanup audio on unmount
+  useEffect(() => {
+    return () => {
+      // Stop all audio
+      audioRefs.current.forEach((audio) => {
+        audio.pause();
+        audio.src = "";
+      });
+      audioRefs.current.clear();
+      playQueueRef.current = [];
+      // Cancel browser TTS
+      if (typeof window !== "undefined" && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
+  // Generate audio
+  const handleGenerateAudio = async (): Promise<Array<{
+    sentenceIndex: number;
+    audioUrl: string;
+  }> | null> => {
+    if (!dialogData || isGeneratingAudio) return null;
+
+    setIsGeneratingAudio(true);
+    try {
+      const sentences = dialogData.dialog.map((entry) => ({
+        text: entry.learn_text,
+        character: entry.character,
+        voiceSuggestion: voiceSuggestions?.[entry.character],
+      }));
+
+      const response = await fetch("/api/audio/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          sentences,
+          learningLanguage,
+          aiProvider: aiConfig?.provider, // Pass user's AI config provider
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to generate audio");
+      }
+
+      const result = await response.json();
+      setAudioData(result.audioData);
+      return result.audioData;
+    } catch (error) {
+      console.error("Failed to generate audio:", error);
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Failed to generate audio. Please try again."
+      );
+      return null;
+    } finally {
+      setIsGeneratingAudio(false);
+    }
+  };
+
+  // Play all audio sequentially
+  const handlePlayAll = async () => {
+    let audioToPlay = audioData;
+
+    if (audioToPlay.length === 0) {
+      // Generate audio first if not generated
+      const generated = await handleGenerateAudio();
+      if (!generated || generated.length === 0) {
+        return;
+      }
+      audioToPlay = generated;
+    }
+
+    playAllAudio(audioToPlay);
+  };
+
+  const playAllAudio = (
+    audioToPlay: Array<{ sentenceIndex: number; audioUrl: string }>
+  ) => {
+    if (audioToPlay.length === 0) return;
+
+    setIsPlayingAll(true);
+    setCurrentlyReadingIndex(0);
+
+    // Check if using browser TTS
+    const isBrowserTTS = audioToPlay[0]?.audioUrl?.startsWith("browser-tts:");
+
+    if (isBrowserTTS) {
+      // Browser TTS: play sequentially with SSML config
+      let currentIndex = 0;
+      const playNext = async () => {
+        if (currentIndex >= dialogData!.dialog.length) {
+          setIsPlayingAll(false);
+          setCurrentlyReadingIndex(null);
+          return;
+        }
+
+        const entry = dialogData!.dialog[currentIndex];
+        setCurrentlyReadingIndex(currentIndex);
+
+        try {
+          await playBrowserTTS(
+            entry.learn_text,
+            learningLanguage,
+            entry.character
+          );
+          currentIndex++;
+          playNext();
+        } catch (error) {
+          console.error("Failed to play browser TTS:", error);
+          currentIndex++;
+          playNext();
+        }
+      };
+
+      playNext();
+    } else {
+      // Server-side TTS: play audio files
+      // Group audio by sentence index
+      const audioBySentence = new Map<number, string[]>();
+      audioToPlay.forEach((item) => {
+        if (!audioBySentence.has(item.sentenceIndex)) {
+          audioBySentence.set(item.sentenceIndex, []);
+        }
+        audioBySentence.get(item.sentenceIndex)!.push(item.audioUrl);
+      });
+
+      // Play audio sequentially
+      let currentSentenceIndex = 0;
+      const playNext = () => {
+        if (currentSentenceIndex >= dialogData!.dialog.length) {
+          setIsPlayingAll(false);
+          setCurrentlyReadingIndex(null);
+          return;
+        }
+
+        const audioUrls = audioBySentence.get(currentSentenceIndex) || [];
+        if (audioUrls.length === 0) {
+          currentSentenceIndex++;
+          playNext();
+          return;
+        }
+
+        setCurrentlyReadingIndex(currentSentenceIndex);
+        let urlIndex = 0;
+
+        const playUrl = () => {
+          if (urlIndex >= audioUrls.length) {
+            currentSentenceIndex++;
+            playNext();
+            return;
+          }
+
+          const audio = new Audio(audioUrls[urlIndex]);
+          audioRefs.current.set(currentSentenceIndex, audio);
+
+          audio.onended = () => {
+            urlIndex++;
+            playUrl();
+          };
+
+          audio.onerror = () => {
+            urlIndex++;
+            playUrl();
+          };
+
+          audio.play().catch((error) => {
+            console.error("Failed to play audio:", error);
+            urlIndex++;
+            playUrl();
+          });
+        };
+
+        playUrl();
+      };
+
+      playNext();
+    }
+  };
+
+  // Play browser TTS for a text with SSML configuration
+  const playBrowserTTS = (
+    text: string,
+    language?: string,
+    characterName?: string
+  ): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      if (typeof window === "undefined" || !window.speechSynthesis) {
+        reject(new Error("Browser Speech Synthesis not supported"));
+        return;
+      }
+
+      // Cancel any ongoing speech
+      window.speechSynthesis.cancel();
+
+      const utterance = new SpeechSynthesisUtterance(text);
+
+      // Get available voices
+      const voices = window.speechSynthesis.getVoices();
+
+      // Use SSML config if available, otherwise fallback to voice suggestion parsing
+      if (characterName) {
+        // Use AI-generated SSML config
+        const config: SSMLConfig = {
+          voice: {
+            language,
+          },
+        };
+        applySSMLToUtterance(utterance, config, voices);
+      } else {
+        // Fallback to parsing voice suggestion (legacy)
+        const voiceSuggestion = characterName
+          ? voiceSuggestions?.[characterName]
+          : undefined;
+        configureUtteranceFromVoiceSuggestion(
+          utterance,
+          voiceSuggestion,
+          language,
+          voices
+        );
+      }
+
+      utterance.onend = () => resolve();
+      utterance.onerror = (error) => reject(error);
+
+      window.speechSynthesis.speak(utterance);
+    });
+  };
+
+  // Play single sentence
+  const handlePlaySentence = async (index: number) => {
+    const sentenceAudios = audioData.filter(
+      (item) => item.sentenceIndex === index
+    );
+    if (sentenceAudios.length === 0) return;
+
+    // Stop current audio if playing
+    audioRefs.current.forEach((audio) => {
+      audio.pause();
+      audio.currentTime = 0;
+    });
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+
+    setCurrentlyReadingIndex(index);
+    setIsPlayingAll(false);
+
+    // Check if using browser TTS
+    const isBrowserTTS =
+      sentenceAudios[0]?.audioUrl?.startsWith("browser-tts:");
+
+    if (isBrowserTTS) {
+      // Extract text from browser-tts marker
+      const text = sentenceAudios[0].audioUrl.replace("browser-tts:", "");
+      const characterName = dialogData!.dialog[index].character;
+
+      try {
+        await playBrowserTTS(text, learningLanguage, characterName);
+        setCurrentlyReadingIndex(null);
+      } catch (error) {
+        console.error("Failed to play browser TTS:", error);
+        setCurrentlyReadingIndex(null);
+      }
+    } else {
+      // Play all audio chunks for this sentence
+      let urlIndex = 0;
+      const playUrl = () => {
+        if (urlIndex >= sentenceAudios.length) {
+          setCurrentlyReadingIndex(null);
+          return;
+        }
+
+        const audio = new Audio(sentenceAudios[urlIndex].audioUrl);
+        audioRefs.current.set(index, audio);
+
+        audio.onended = () => {
+          urlIndex++;
+          playUrl();
+        };
+
+        audio.onerror = () => {
+          urlIndex++;
+          playUrl();
+        };
+
+        audio.play().catch((error) => {
+          console.error("Failed to play audio:", error);
+          setCurrentlyReadingIndex(null);
+        });
+      };
+
+      playUrl();
+    }
+  };
 
   if (!dialogData) {
     return (
@@ -92,6 +466,7 @@ export const DialogDisplay = ({
   }, [characters]);
 
   const isFullPage = !!onClose;
+  const hasAudio = audioData.length > 0;
 
   return (
     <div
@@ -106,18 +481,66 @@ export const DialogDisplay = ({
           <h3 className="text-lg sm:text-xl font-semibold text-primary-700 dark:text-primary-200">
             {t("dialog")}
           </h3>
-          <button
-            onClick={onClose}
-            className="rounded-md px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium text-muted-foreground transition hover:bg-surface-100 dark:hover:bg-surface-800"
-          >
-            {t("close")}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handlePlayAll}
+              disabled={isGeneratingAudio || isPlayingAll}
+              className="rounded-md px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium text-primary-600 dark:text-primary-400 transition hover:bg-primary-100 dark:hover:bg-primary-900/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+            >
+              {isGeneratingAudio ? (
+                <>
+                  <span className="animate-spin">⏳</span>
+                  <span>{t("generating") || "Generating..."}</span>
+                </>
+              ) : isPlayingAll ? (
+                <>
+                  <span>⏸</span>
+                  <span>{t("playing") || "Playing..."}</span>
+                </>
+              ) : (
+                <>
+                  <span>🔊</span>
+                  <span>{t("readAll") || "Read All"}</span>
+                </>
+              )}
+            </button>
+            <button
+              onClick={onClose}
+              className="rounded-md px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium text-muted-foreground transition hover:bg-surface-100 dark:hover:bg-surface-800"
+            >
+              {t("close")}
+            </button>
+          </div>
         </div>
       )}
       {!isFullPage && (
-        <h3 className="text-lg font-semibold text-primary-700 dark:text-primary-200">
-          {t("dialog")}
-        </h3>
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-primary-700 dark:text-primary-200">
+            {t("dialog")}
+          </h3>
+          <button
+            onClick={handlePlayAll}
+            disabled={isGeneratingAudio || isPlayingAll}
+            className="rounded-md px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium text-primary-600 dark:text-primary-400 transition hover:bg-primary-100 dark:hover:bg-primary-900/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+          >
+            {isGeneratingAudio ? (
+              <>
+                <span className="animate-spin">⏳</span>
+                <span>{t("generating") || "Generating..."}</span>
+              </>
+            ) : isPlayingAll ? (
+              <>
+                <span>⏸</span>
+                <span>{t("playing") || "Playing..."}</span>
+              </>
+            ) : (
+              <>
+                <span>🔊</span>
+                <span>{t("readAll") || "Read All"}</span>
+              </>
+            )}
+          </button>
+        </div>
       )}
       <div
         className={`space-y-4 ${
@@ -134,18 +557,30 @@ export const DialogDisplay = ({
               className={`flex ${isLeft ? "justify-start" : "justify-end"}`}
             >
               <div
-                className={`max-w-[85%] sm:max-w-[80%] rounded-lg px-3 py-2 sm:px-4 sm:py-3 ${
-                  isLeft
+                className={`max-w-[85%] sm:max-w-[80%] rounded-lg px-3 py-2 sm:px-4 sm:py-3 transition-colors ${
+                  currentlyReadingIndex === index
+                    ? "ring-2 ring-primary-500 bg-primary-200 dark:bg-primary-800/50"
+                    : isLeft
                     ? "bg-primary-100 dark:bg-primary-900/30"
                     : "bg-surface-200 dark:bg-surface-700"
                 }`}
               >
                 <div
-                  className={`mb-1 text-xs font-semibold text-muted-foreground flex ${
+                  className={`mb-1 text-xs font-semibold text-muted-foreground flex items-center gap-2 ${
                     isLeft ? "justify-start" : "justify-end"
                   }`}
                 >
-                  {entry.character}
+                  <span>{entry.character}</span>
+                  {hasAudio && (
+                    <button
+                      onClick={() => handlePlaySentence(index)}
+                      disabled={currentlyReadingIndex === index && isPlayingAll}
+                      className="text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 disabled:opacity-50 transition-colors"
+                      title={t("playSentence") || "Play this sentence"}
+                    >
+                      {currentlyReadingIndex === index ? "⏸" : "▶"}
+                    </button>
+                  )}
                 </div>
                 <div className="space-y-1">
                   <div className="text-sm break-words">

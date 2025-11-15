@@ -69,9 +69,23 @@ export function useFlowController(
       onEvent?.(event);
 
       // Update state from event if available
-      if (event.type === "status-change" && event.status) {
+      if (event.type === "status-change") {
         setState((prev) => {
-          if (prev) {
+          // If event has full state data, use it (this is the final state with all step results)
+          if (event.data) {
+            const eventData = event.data as {
+              sessionId?: string;
+              state?: FlowState;
+            };
+            if (eventData?.state) {
+              // Use the full state from the event - this is the final state with all results
+              updateState(eventData.state);
+              return eventData.state;
+            }
+          }
+          
+          // Otherwise, just update the status if provided
+          if (event.status && prev) {
             const updated: FlowState = {
               ...prev,
               status: event.status as FlowStatus,
@@ -197,7 +211,7 @@ export function useFlowController(
 
                 handleEvent(event);
 
-                // Extract session ID from state if available in event
+                // Extract session ID from state-change events
                 if (event.type === "status-change" && event.data) {
                   const eventData = event.data as {
                     sessionId?: string;
@@ -206,9 +220,7 @@ export function useFlowController(
                   if (eventData?.sessionId) {
                     sessionIdRef.current = eventData.sessionId;
                   }
-                  if (eventData?.state) {
-                    updateState(eventData.state);
-                  }
+                  // Note: Full state update is now handled in handleEvent above
                 }
               } catch (e) {
                 // Silently handle parsing errors

@@ -102,18 +102,15 @@ export interface DialogRecord {
     }>;
   };
   voiceSuggestions?: Record<string, string>; // character -> voice description (natural language)
-  ssmlDocument?: string; // Full SSML document for this dialog
-  ssmlMarkers?: Array<{
-    sentenceIndex: number;
-    start: number;
-    end: number;
-    character: string;
-    text: string;
-  }>; // Estimated per-sentence markers aligned to generated audio
-  ssmlChunks?: Array<{
-    sentenceIndex: number;
-    chunks: string[]; // sentence-level SSML chunks (each valid <speak>…</speak>), e.g. for provider limits
-  }>;
+  // Cached audio data (base64 encoded MP3) - only stored if total size < 300KB
+  cachedAudio?: {
+    audioBase64: string; // Base64 encoded merged MP3 audio
+    sentenceAudioBuffers?: Array<{
+      sentenceIndex: number;
+      audioBase64: string; // Base64 encoded audio for this sentence
+      character?: string;
+    }>;
+  };
   learningLanguage: LearningLanguageCode;
   createdAt: string;
   updatedAt: string;

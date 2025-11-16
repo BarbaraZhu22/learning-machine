@@ -80,6 +80,24 @@ export const DialogDisplay = ({
   const audioRefs = useRef<Map<number, HTMLAudioElement>>(new Map());
   const playQueueRef = useRef<number[]>([]);
 
+  // Unified Aliyun audio (single MP3) + markers
+  const [unifiedAudioUrl, setUnifiedAudioUrl] = useState<string | null>(null);
+  const [unifiedAudioErrorText, setUnifiedAudioErrorText] = useState<
+    string | null
+  >(null);
+  const [unifiedAudioFileName, setUnifiedAudioFileName] =
+    useState<string>("dialog.mp3");
+  const [markers, setMarkers] = useState<
+    Array<{
+      sentenceIndex: number;
+      start: number;
+      end: number;
+      character: string;
+      text: string;
+    }>
+  >([]);
+  const unifiedAudioRef = useRef<HTMLAudioElement | null>(null);
+
   const dialogData = useMemo(() => {
     if (dialogRecord) {
       return dialogRecord.dialogContent;
@@ -90,32 +108,8 @@ export const DialogDisplay = ({
     return null;
   }, [flowState, dialogRecord]);
 
-  // Get SSML config and voice suggestions (legacy)
-  const ssmlConfig = useMemo(() => {
-    if (dialogRecord?.ssmlConfig) {
-      return dialogRecord.ssmlConfig;
-    }
-    // Try to extract from flowState
-    if (flowState) {
-      const audioStep = flowState.steps.find(
-        (s) => s.nodeId === "dialog-audio"
-      );
-      const audioOutput = audioStep?.result?.output;
-      if (audioOutput && typeof audioOutput === "object") {
-        // Check if it's SSML config format
-        const hasSSMLStructure = Object.values(audioOutput).some(
-          (value) =>
-            typeof value === "object" &&
-            value !== null &&
-            ("voice" in value || "prosody" in value || "emphasis" in value)
-        );
-        if (hasSSMLStructure) {
-          return audioOutput as DialogRecord["ssmlConfig"];
-        }
-      }
-    }
-    return undefined;
-  }, [dialogRecord, flowState]);
+  // Keep legacy voiceSuggestions only; ssmlDocument is stored on the record
+  const ssmlDocument = dialogRecord?.ssmlDocument;
 
   // Legacy voice suggestions (for backward compatibility)
   const voiceSuggestions = useMemo(() => {
@@ -155,14 +149,21 @@ export const DialogDisplay = ({
       if (typeof window !== "undefined" && window.speechSynthesis) {
         window.speechSynthesis.cancel();
       }
+      // Cleanup unified audio element
+      if (unifiedAudioRef.current) {
+        unifiedAudioRef.current.pause();
+        unifiedAudioRef.current.src = "";
+        unifiedAudioRef.current = null;
+      }
     };
   }, []);
 
   // Generate audio
-  const handleGenerateAudio = async (): Promise<
-    Array<{ sentenceIndex: number; audioUrl: string; character?: string }>
-    | null
-  > => {
+  const handleGenerateAudio = async (): Promise<Array<{
+    sentenceIndex: number;
+    audioUrl: string;
+    character?: string;
+  }> | null> => {
     if (!dialogData || isGeneratingAudio) return null;
 
     setIsGeneratingAudio(true);
@@ -176,36 +177,88 @@ export const DialogDisplay = ({
           dialogContent: dialogData,
           voiceSuggestions,
           learningLanguage,
-          ssmlConfig: dialogRecord?.ssmlConfig, // Pass existing SSML config if available
+          ssml: dialogRecord?.ssmlDocument, // Pass existing SSML document if available
           aiProvider: aiConfig?.provider, // Pass user's AI config provider
         }),
       });
-
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Failed to generate audio");
+        // Try to parse JSON error; fall back to text
+        let message = "Failed to generate audio";
+        try {
+          const error = await response.json();
+          message = error.message || message;
+        } catch {
+          try {
+            message = await response.text();
+          } catch {}
+        }
+        setUnifiedAudioErrorText(message);
+        throw new Error(message);
       }
 
-      const result = await response.json();
-      setAudioData(result.audioData);
+      const contentType = response.headers.get("content-type") || "";
+      if (contentType.includes("audio/")) {
+        const blob = await response.blob();
+        // Ensure blob type is a playable audio MIME
+        const normalizedBlob =
+          blob.type && blob.type.startsWith("audio/")
+            ? blob
+            : new Blob([blob], { type: "audio/mpeg" });
 
-      // If SSML config was generated, save it to the dialog record
-      if (result.ssmlConfig && dialogRecord) {
+        let objectUrl: string | null = null;
         try {
-          const { indexedDbClient } = await import("@/lib/indexedDb");
-          const updated: DialogRecord = {
-            ...dialogRecord,
-            ssmlConfig: result.ssmlConfig,
-            updatedAt: new Date().toISOString(),
-          };
-          await indexedDbClient.saveDialog(updated);
-        } catch (error) {
-          console.error("Failed to save SSML config:", error);
+          objectUrl = URL.createObjectURL(normalizedBlob);
+          setUnifiedAudioUrl(objectUrl);
+          setUnifiedAudioErrorText(null);
+          setUnifiedAudioFileName(`dialog-${Date.now()}.mp3`);
+        } catch (e) {
+          console.error("createObjectURL failed, showing text fallback", e);
+          try {
+            const text = await normalizedBlob.text();
+            setUnifiedAudioUrl(null);
+            setUnifiedAudioErrorText(text || "Audio blob could not be played.");
+          } catch {
+            setUnifiedAudioUrl(null);
+            setUnifiedAudioErrorText("Audio blob could not be played.");
+          }
+        }
+
+        setMarkers([]); // no markers returned in blob mode
+        setAudioData([]);
+      } else {
+        // Backward compatibility: JSON payload
+        const result = await response.json();
+        if (result.audioUrl) {
+          setUnifiedAudioUrl(result.audioUrl as string);
+          setMarkers(Array.isArray(result.markers) ? result.markers : []);
+          setAudioData([]);
+        } else if (Array.isArray(result.audioData)) {
+          setAudioData(result.audioData);
+        }
+
+        // Save SSML document and markers if returned
+        if ((result.ssmlDocument || result.markers) && dialogRecord) {
+          try {
+            const { indexedDbClient } = await import("@/lib/indexedDb");
+            const updated: DialogRecord = {
+              ...dialogRecord,
+              ssmlDocument: result.ssmlDocument ?? dialogRecord.ssmlDocument,
+              ssmlMarkers: Array.isArray(result.markers)
+                ? result.markers
+                : dialogRecord.ssmlMarkers,
+              updatedAt: new Date().toISOString(),
+            };
+            await indexedDbClient.saveDialog(updated);
+          } catch (error) {
+            console.error("Failed to save SSML config:", error);
+          }
         }
       }
 
-      return result.audioData;
+      // In blob or unified JSON modes, we return empty array for sentence-level audio
+      return [];
     } catch (error) {
+      debugger;
       console.error("Failed to generate audio:", error);
       alert(
         error instanceof Error
@@ -220,6 +273,23 @@ export const DialogDisplay = ({
 
   // Play all audio sequentially
   const handlePlayAll = async () => {
+    // If we already have a unified MP3 URL (no markers), play it via a simple HTMLAudioElement.
+    if (unifiedAudioUrl && markers.length === 0) {
+      try {
+        // Destroy any previous unified player
+        if (unifiedAudioRef.current) {
+          unifiedAudioRef.current.pause();
+          unifiedAudioRef.current.src = "";
+        }
+        const audioEl = new Audio(unifiedAudioUrl);
+        unifiedAudioRef.current = audioEl;
+        await audioEl.play();
+      } catch (e) {
+        console.error("Failed to play unified audio (no markers):", e);
+      }
+      return;
+    }
+
     let audioToPlay = audioData;
 
     if (audioToPlay.length === 0) {
@@ -237,12 +307,53 @@ export const DialogDisplay = ({
   const playAllAudio = (
     audioToPlay: Array<{ sentenceIndex: number; audioUrl: string }>
   ) => {
+    // If unified MP3 exists with markers, play it via HTMLAudioElement + timeupdate
+    if (unifiedAudioUrl && markers.length > 0) {
+      // Re-create player each time to avoid stale listeners
+      if (unifiedAudioRef.current) {
+        unifiedAudioRef.current.pause();
+        unifiedAudioRef.current.src = "";
+      }
+      const audioEl = new Audio(unifiedAudioUrl);
+      unifiedAudioRef.current = audioEl;
+      let currentIndex = 0;
+
+      setIsPlayingAll(true);
+      setCurrentlyReadingIndex(0);
+
+      const onTimeUpdate = () => {
+        const m = markers[currentIndex];
+        if (!m) return;
+        if (audioEl.currentTime >= m.end - 0.05) {
+          // advance
+          currentIndex += 1;
+          if (currentIndex >= markers.length) {
+            audioEl.pause();
+            audioEl.removeEventListener("timeupdate", onTimeUpdate);
+            setIsPlayingAll(false);
+            setCurrentlyReadingIndex(null);
+            return;
+          }
+          setCurrentlyReadingIndex(markers[currentIndex].sentenceIndex);
+          audioEl.currentTime = Math.max(0, markers[currentIndex].start);
+        }
+      };
+
+      audioEl.currentTime = Math.max(0, markers[0].start);
+      audioEl.addEventListener("timeupdate", onTimeUpdate);
+      audioEl.play().catch((e) => {
+        console.error("Failed to play unified audio:", e);
+        setIsPlayingAll(false);
+        setCurrentlyReadingIndex(null);
+      });
+      return;
+    }
+
     if (audioToPlay.length === 0) return;
 
     setIsPlayingAll(true);
     setCurrentlyReadingIndex(0);
 
-    // Check if using browser TTS
     const isBrowserTTS = audioToPlay[0]?.audioUrl?.startsWith("browser-tts:");
 
     if (isBrowserTTS) {
@@ -339,7 +450,7 @@ export const DialogDisplay = ({
     }
   };
 
-  // Play browser TTS for a text with SSML configuration
+  // Play browser TTS for a text (uses voiceSuggestions only)
   const playBrowserTTS = (
     text: string,
     language?: string,
@@ -360,54 +471,17 @@ export const DialogDisplay = ({
       // Get available voices
       const voices = window.speechSynthesis.getVoices();
 
-      // Use SSML config if available (new format with per-sentence config)
-      if (characterName && ssmlConfig?.characters?.[characterName]) {
-        const characterConfig = ssmlConfig.characters[characterName];
-        const sentenceConfig = sentenceIndex !== undefined 
-          ? ssmlConfig.sentences?.find(s => s.index === sentenceIndex && s.character === characterName)
-          : undefined;
-
-        // Build SSML config from character base + sentence-specific prosody
-        const config: SSMLConfig = {
-          voice: {
-            ...characterConfig.voice,
-            language,
-          },
-          prosody: sentenceConfig?.prosody,
-          emphasis: sentenceConfig?.emphasis,
-          break: sentenceConfig?.break
-            ? {
-                ...sentenceConfig.break,
-                time:
-                  typeof sentenceConfig.break.time === 'number'
-                    ? sentenceConfig.break.time
-                    : sentenceConfig.break.time,
-              }
-            : undefined,
-        };
-        applySSMLToUtterance(utterance, config, voices);
-
-        // Apply break time after sentence
-        if (sentenceConfig?.break?.time) {
-          utterance.onend = () => {
-            setTimeout(() => resolve(), sentenceConfig.break!.time!);
-          };
-        } else {
-          utterance.onend = () => resolve();
-        }
-      } else {
-        // Fallback to parsing voice suggestion (legacy)
-        const voiceSuggestion = characterName
-          ? voiceSuggestions?.[characterName]
-          : undefined;
-        configureUtteranceFromVoiceSuggestion(
-          utterance,
-          voiceSuggestion,
-          language,
-          voices
-        );
-        utterance.onend = () => resolve();
-      }
+      // Parse voice suggestion (legacy) — SSML document is used only on the server
+      const voiceSuggestion = characterName
+        ? voiceSuggestions?.[characterName]
+        : undefined;
+      configureUtteranceFromVoiceSuggestion(
+        utterance,
+        voiceSuggestion,
+        language,
+        voices
+      );
+      utterance.onend = () => resolve();
 
       utterance.onerror = (error) => reject(error);
 
@@ -417,6 +491,39 @@ export const DialogDisplay = ({
 
   // Play single sentence
   const handlePlaySentence = async (index: number) => {
+    // If unified MP3 exists with markers, seek and play only that sentence
+    if (unifiedAudioUrl && markers.length > 0) {
+      const mark = markers.find((m) => m.sentenceIndex === index);
+      if (!mark) return;
+
+      if (!unifiedAudioRef.current) {
+        unifiedAudioRef.current = new Audio(unifiedAudioUrl);
+      } else if (unifiedAudioRef.current.src !== unifiedAudioUrl) {
+        unifiedAudioRef.current.src = unifiedAudioUrl;
+      }
+
+      const audioEl = unifiedAudioRef.current;
+      setCurrentlyReadingIndex(index);
+      setIsPlayingAll(false);
+
+      const onTimeUpdate = () => {
+        if (audioEl.currentTime >= mark.end - 0.05) {
+          audioEl.pause();
+          audioEl.removeEventListener("timeupdate", onTimeUpdate);
+          setCurrentlyReadingIndex(null);
+        }
+      };
+
+      audioEl.currentTime = Math.max(0, mark.start);
+      audioEl.removeEventListener("timeupdate", onTimeUpdate);
+      audioEl.addEventListener("timeupdate", onTimeUpdate);
+      audioEl.play().catch((e) => {
+        console.error("Failed to play unified audio sentence:", e);
+        setCurrentlyReadingIndex(null);
+      });
+      return;
+    }
+
     const sentenceAudios = audioData.filter(
       (item) => item.sentenceIndex === index
     );
@@ -516,12 +623,39 @@ export const DialogDisplay = ({
           : "space-y-4 rounded-lg border border-surface-200/50 bg-[color:var(--glass-base)] p-6 shadow-lg shadow-primary-100/40 backdrop-blur dark:border-surface-700 dark:bg-surface-900"
       }`}
     >
+      {unifiedAudioErrorText && (
+        <div className="mx-4 my-2 rounded border border-red-300 bg-red-50 p-3 text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200">
+          <div className="text-xs font-mono whitespace-pre-wrap break-words">
+            {unifiedAudioErrorText}
+          </div>
+        </div>
+      )}
       {isFullPage && (
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-surface-200/50 bg-[color:var(--glass-base)] px-4 py-3 sm:px-6 sm:py-4 backdrop-blur dark:border-surface-700">
           <h3 className="text-lg sm:text-xl font-semibold text-primary-700 dark:text-primary-200">
             {t("dialog")}
           </h3>
           <div className="flex items-center gap-2">
+            {unifiedAudioUrl && (
+              <button
+                onClick={() => {
+                  try {
+                    const a = document.createElement("a");
+                    a.href = unifiedAudioUrl;
+                    a.download = unifiedAudioFileName || "dialog.mp3";
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                  } catch (e) {
+                    console.error("Failed to trigger download", e);
+                  }
+                }}
+                className="rounded-md px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium text-primary-700 dark:text-primary-200 transition hover:bg-primary-100 dark:hover:bg-primary-900/30"
+                title="Download MP3"
+              >
+                ⬇ MP3
+              </button>
+            )}
             <button
               onClick={handlePlayAll}
               disabled={isGeneratingAudio || isPlayingAll}

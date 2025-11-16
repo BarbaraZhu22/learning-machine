@@ -101,29 +101,18 @@ export interface DialogRecord {
     }>;
   };
   voiceSuggestions?: Record<string, string>; // character -> voice description (natural language)
-  ssmlConfig?: {
-    characters: Record<string, {
-      voice?: {
-        gender?: 'male' | 'female' | 'neutral';
-        age?: 'child' | 'young' | 'adult' | 'elderly';
-        accent?: string;
-      };
-    }>; // character -> base voice config (same voice for all sentences)
-    sentences: Array<{
-      index: number;
-      character: string;
-      prosody?: {
-        rate?: number;
-        pitch?: number;
-        volume?: number;
-      };
-      emphasis?: 'strong' | 'moderate' | 'reduced';
-      break?: {
-        time?: number; // milliseconds
-        strength?: 'none' | 'x-weak' | 'weak' | 'medium' | 'strong' | 'x-strong';
-      };
-    }>; // per-sentence prosody and break config
-  };
+  ssmlDocument?: string; // Full SSML document for this dialog
+  ssmlMarkers?: Array<{
+    sentenceIndex: number;
+    start: number;
+    end: number;
+    character: string;
+    text: string;
+  }>; // Estimated per-sentence markers aligned to generated audio
+  ssmlChunks?: Array<{
+    sentenceIndex: number;
+    chunks: string[]; // sentence-level SSML chunks (each valid <speak>…</speak>), e.g. for provider limits
+  }>;
   learningLanguage: LearningLanguageCode;
   createdAt: string;
   updatedAt: string;

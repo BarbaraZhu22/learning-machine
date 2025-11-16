@@ -204,6 +204,47 @@ Return ONLY the JSON object, no explanations.`;
   return validatedSelection;
 }
 
+/**
+ * Convert ReadableStream to ArrayBuffer
+ */
+async function streamToArrayBuffer(
+  stream: ReadableStream<Uint8Array>
+): Promise<ArrayBuffer> {
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalLength = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value) {
+      chunks.push(value);
+      totalLength += value.length;
+    }
+  }
+
+  const result = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.length;
+  }
+
+  return result.buffer;
+}
+
+/**
+ * Convert ArrayBuffer to base64 string
+ */
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as AudioGenerationRequest;
@@ -254,33 +295,117 @@ export async function POST(request: NextRequest) {
       apiKey
     );
 
-    // For now, generate audio using the first dialog entry's voice
-    // TODO: Generate audio for each dialog entry with its character's voice
-    const firstDialogEntry = dialogContent.dialog[0];
-    const characterName = firstDialogEntry.character;
-    const requestedVoice = characterVoices[characterName];
-    // Final validation to ensure voice_type is valid before synthesis
-    const selectedVoice = validateAndFindVoice(requestedVoice, availableVoices);
-    const textToSynthesize =
-      firstDialogEntry.learn_text || firstDialogEntry.use_text;
-    const source = await synthesizeTTS({
-      text: textToSynthesize,
-      speaker: selectedVoice,
-      audioFormat: "mp3",
-      sampleRate: 24000,
-      speed: 1.0,
-      volume: 1.0,
+    // Create a stream to send sentence-by-sentence audio
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          // Process each dialog entry sequentially
+          for (let index = 0; index < dialogContent.dialog.length; index++) {
+            const entry = dialogContent.dialog[index];
+            const characterName = entry.character;
+            const requestedVoice = characterVoices[characterName];
+            const selectedVoice = validateAndFindVoice(
+              requestedVoice,
+              availableVoices
+            );
+            const textToSynthesize =
+              entry.learn_text || entry.use_text;
+
+            try {
+              // Generate audio for this sentence
+              const audioStream = await synthesizeTTS({
+                text: textToSynthesize,
+                speaker: selectedVoice,
+                audioFormat: "mp3",
+                sampleRate: 24000,
+                speed: 1.0,
+                volume: 1.0,
+                lan: learningLanguage,
+              });
+
+              if (audioStream) {
+                // Convert stream to ArrayBuffer, then to base64
+                const audioBuffer = await streamToArrayBuffer(audioStream);
+                const audioBase64 = arrayBufferToBase64(audioBuffer);
+
+                // Send sentence audio data as JSON with base64 string (not data URL)
+                // Client will create Blob URL from this
+                const sentenceData = {
+                  type: "sentence",
+                  sentenceIndex: index,
+                  character: characterName,
+                  audioBase64: audioBase64, // Send raw base64, client will create Blob URL
+                  success: true,
+                };
+
+                const data = JSON.stringify(sentenceData) + "\n";
+                controller.enqueue(encoder.encode(data));
+              } else {
+                // Send error for this sentence but continue
+                const errorData = {
+                  type: "sentence",
+                  sentenceIndex: index,
+                  character: characterName,
+                  success: false,
+                  error: "Failed to generate audio for this sentence",
+                };
+
+                const data = JSON.stringify(errorData) + "\n";
+                controller.enqueue(encoder.encode(data));
+              }
+            } catch (sentenceError) {
+              // Send error for this sentence but continue with next
+              console.error(
+                `[audio] Failed to generate audio for sentence ${index}:`,
+                sentenceError
+              );
+
+              const errorData = {
+                type: "sentence",
+                sentenceIndex: index,
+                character: characterName,
+                success: false,
+                error:
+                  sentenceError instanceof Error
+                    ? sentenceError.message
+                    : String(sentenceError),
+              };
+
+              const data = JSON.stringify(errorData) + "\n";
+              controller.enqueue(encoder.encode(data));
+            }
+          }
+
+          // Send completion message
+          const completionData = {
+            type: "complete",
+            totalSentences: dialogContent.dialog.length,
+          };
+          const data = JSON.stringify(completionData) + "\n";
+          controller.enqueue(encoder.encode(data));
+
+          controller.close();
+        } catch (error) {
+          // Send error and close
+          const errorData = {
+            type: "error",
+            error:
+              error instanceof Error ? error.message : String(error),
+          };
+          const data = JSON.stringify(errorData) + "\n";
+          controller.enqueue(encoder.encode(data));
+          controller.close();
+        }
+      },
     });
 
-    if (!source) {
-      return NextResponse.json({ error: "TTS返回空音频流" }, { status: 502 });
-    }
-
-    // Stream raw source directly to the client (no prebuffering).
-    return new NextResponse(source, {
+    // Return stream with text/event-stream content type for SSE-like behavior
+    return new NextResponse(stream, {
       headers: {
-        "Content-Type": "audio/mpeg",
+        "Content-Type": "text/event-stream",
         "Cache-Control": "no-store",
+        "Connection": "keep-alive",
       },
     });
   } catch (error) {

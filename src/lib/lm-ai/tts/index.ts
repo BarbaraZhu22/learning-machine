@@ -1,4 +1,7 @@
 // app/utils/tts.ts
+import type { LearningLanguageCode } from "@/types";
+import { speakFixMap } from "./speakerMap";
+
 export interface TTSParams {
   text: string;
   speaker?: string;
@@ -6,6 +9,58 @@ export interface TTSParams {
   sampleRate?: number;
   speed?: number;
   volume?: number;
+  lan?: LearningLanguageCode;
+}
+
+/**
+ * Apply text transformations based on language-specific rules
+ * Ensures that already replaced text is not replaced again
+ */
+function applySpeakFix(
+  text: string,
+  lan: LearningLanguageCode | undefined
+): string {
+  if (!lan) return text;
+
+  const fixRules = speakFixMap[lan as keyof typeof speakFixMap];
+  if (!fixRules || fixRules.length === 0) return text;
+
+  // Use a marker to protect replaced segments
+  const MARKER = "\uE000";
+  let result = text;
+
+  // Apply each rule in order
+  for (const rule of fixRules) {
+    // Use the regex directly, ensure it has global flag
+    let regex = rule.regex;
+    if (!regex.flags.includes('g')) {
+      regex = new RegExp(regex.source, regex.flags + 'g');
+    }
+
+    // Replace with callback: wrap replacement with markers to protect it
+    result = result.replace(regex, (match, ...args) => {
+      // Get offset (position of match in string)
+      // replace callback: (match, ...capturedGroups, offset, string)
+      const offset = args[args.length - 2] as number;
+      
+      // Check if this match is inside a marked (protected) segment
+      const textBeforeMatch = result.substring(0, offset);
+      const markerCountBefore = (textBeforeMatch.match(new RegExp(MARKER, "g")) || []).length;
+      
+      // If inside a protected segment (odd number of markers), return original match
+      if (markerCountBefore % 2 === 1) {
+        return match;
+      }
+      
+      // Otherwise, wrap replacement with markers
+      return MARKER + rule.replacement + MARKER;
+    });
+  }
+
+  // Remove all markers
+  result = result.replace(new RegExp(MARKER, "g"), "");
+
+  return result;
 }
 
 export async function synthesizeTTS(
@@ -16,7 +71,11 @@ export async function synthesizeTTS(
     speaker = "zh_female_vv_uranus_bigtts",
     audioFormat = "mp3",
     sampleRate = 24000,
+    lan,
   } = params;
+
+  // Apply text transformations based on language
+  const processedText = applySpeakFix(text, lan);
 
   const VOLC_TTS_TOKEN = process.env.VOLC_TTS_TOKEN;
   const VOLC_TTS_APPID = process.env.VOLC_TTS_APPID;
@@ -46,7 +105,7 @@ export async function synthesizeTTS(
           uid: "12345",
         },
         req_params: {
-          text,
+          text: processedText,
           speaker,
           audio_params: {
             format: audioFormat,

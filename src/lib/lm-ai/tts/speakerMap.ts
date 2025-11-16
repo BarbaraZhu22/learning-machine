@@ -232,3 +232,80 @@ export function getVoicesByLanguage(
 
   return doubao10Voices.filter((voice) => voice.lan === "中文");
 }
+
+export const speakFixMap = {
+  spanish: [
+    { original: "ll", replacement: "yi", regex: /ll/gi },
+    { original: "rr", replacement: "r", regex: /rr/gi },
+    { original: "qu", replacement: "k", regex: /qu/gi },
+    { original: "ñ", replacement: "ny", regex: /ñ/gi },
+    { original: "ce", replacement: "se", regex: /ce/gi },
+    { original: "ci", replacement: "si", regex: /ci/gi },
+    { original: "gy", replacement: "hy", regex: /gy(?=[aeiou])/gi },
+    { original: "c", replacement: "k", regex: /c(?![ei])/gi },
+    { original: "g", replacement: "h", regex: /g(?=[ei])/gi },
+    { original: "v", replacement: "b", regex: /v/gi },
+    { original: "z", replacement: "s", regex: /z/gi },
+    { original: "í", replacement: "e", regex: /í/gi },
+    { original: "j", replacement: "h", regex: /j(?=[aeiou])/gi },
+  ],
+
+  french: [
+    { original: "ch", replacement: "sh", regex: /ch/gi },
+    { original: "ph", replacement: "f", regex: /ph/gi },
+    { original: "gn", replacement: "ny", regex: /gn/gi },
+    { original: "oi", replacement: "wa", regex: /oi/gi },
+    { original: "ou", replacement: "u", regex: /ou/gi },
+    { original: "au", replacement: "o", regex: /au/gi },
+    { original: "oe", replacement: "e", regex: /oe/gi },
+    { original: "eu", replacement: "ö", regex: /eu/gi },
+    { original: "qu", replacement: "k", regex: /qu/gi },
+    { original: "ç", replacement: "s", regex: /ç/gi },
+    { original: "é", replacement: "e", regex: /é/g },
+    { original: "è", replacement: "e", regex: /è/g },
+    { original: "ê", replacement: "e", regex: /ê/g },
+    { original: "î", replacement: "i", regex: /î/g },
+    { original: "ô", replacement: "o", regex: /ô/g },
+    { original: "û", replacement: "u", regex: /û/g },
+  ],
+
+  italian: [
+    { original: "sci", replacement: "shi", regex: /sci/gi },
+    { original: "sce", replacement: "she", regex: /sce/gi },
+    { original: "gli", replacement: "li", regex: /gli/gi },
+    { original: "ch", replacement: "k", regex: /ch/gi },
+    { original: "gh", replacement: "g", regex: /gh/gi },
+    { original: "gn", replacement: "ny", regex: /gn/gi },
+    { original: "qu", replacement: "kw", regex: /qu/gi },
+    { original: "zz", replacement: "ts", regex: /zz/gi },
+    { original: "ce", replacement: "che", regex: /ce/gi },
+    { original: "ci", replacement: "chi", regex: /ci/gi },
+    { original: "ge", replacement: "je", regex: /ge/gi },
+    { original: "gi", replacement: "ji", regex: /gi/gi },
+    { original: "z", replacement: "ts", regex: /z/gi },
+    { original: "h", replacement: "", regex: /h/gi },
+  ],
+
+  portuguese: [
+    { original: "nh", replacement: "ny", regex: /nh/gi },
+    { original: "lh", replacement: "li", regex: /lh/gi },
+    { original: "ch", replacement: "sh", regex: /ch/gi },
+    { original: "qu", replacement: "ku", regex: /qu/gi },
+    { original: "rr", replacement: "r", regex: /rr/gi },
+    { original: "ce", replacement: "se", regex: /ce/gi },
+    { original: "ci", replacement: "si", regex: /ci/gi },
+    { original: "ge", replacement: "je", regex: /ge/gi },
+    { original: "gi", replacement: "ji", regex: /gi/gi },
+    { original: "gu", replacement: "g", regex: /gu(?=[ei])/gi },
+    { original: "c", replacement: "k", regex: /c(?![ei])/gi },
+    { original: "z", replacement: "s", regex: /z/gi },
+    { original: "v", replacement: "b", regex: /v/gi },
+
+    // 词首 / 句首 / 标点后 r → h
+    {
+      original: "r",
+      replacement: "h",
+      regex: /(?<=^|\s)r/gi,
+    },
+  ],
+};

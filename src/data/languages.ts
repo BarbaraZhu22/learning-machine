@@ -102,6 +102,8 @@ export const translations: LanguageCatalog = {
     generating: "generating",
     playing: "playing",
     readAll: "read all",
+    slow: "slow",
+    normal: "normal",
   },
   zh: {
     appTitle: "学习机",
@@ -197,6 +199,8 @@ export const translations: LanguageCatalog = {
     generating: "生成中",
     playing: "播放中",
     readAll: "播放整段",
+    slow: "慢速",
+    normal: "正常",
   },
 };
 

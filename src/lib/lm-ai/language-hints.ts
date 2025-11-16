@@ -23,6 +23,7 @@ export function getLanguageContext(context?: NodeContext): {
     zh: 'Chinese',
     english: 'English',
     chinese: 'Chinese',
+    cantonese: 'Cantonese',
     spanish: 'Spanish',
     portuguese: 'Portuguese',
     french: 'French',

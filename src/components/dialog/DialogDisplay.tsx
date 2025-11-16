@@ -97,6 +97,10 @@ export const DialogDisplay = ({
     }>
   >([]);
   const unifiedAudioRef = useRef<HTMLAudioElement | null>(null);
+  // Web Audio API: keep raw audio data and playback context
+  const unifiedAudioArrayBufferRef = useRef<ArrayBuffer | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioSourceRef = useRef<AudioBufferSourceNode | null>(null);
 
   const dialogData = useMemo(() => {
     if (dialogRecord) {
@@ -149,21 +153,25 @@ export const DialogDisplay = ({
       if (typeof window !== "undefined" && window.speechSynthesis) {
         window.speechSynthesis.cancel();
       }
-      // Cleanup unified audio element
-      if (unifiedAudioRef.current) {
-        unifiedAudioRef.current.pause();
-        unifiedAudioRef.current.src = "";
-        unifiedAudioRef.current = null;
+      // Cleanup Web Audio playback
+      try {
+        if (audioSourceRef.current) {
+          audioSourceRef.current.stop();
+          audioSourceRef.current.disconnect();
+          audioSourceRef.current = null;
+        }
+        if (audioContextRef.current) {
+          audioContextRef.current.close();
+          audioContextRef.current = null;
+        }
+      } catch {
+        // ignore close errors
       }
     };
   }, []);
 
-  // Generate audio
-  const handleGenerateAudio = async (): Promise<Array<{
-    sentenceIndex: number;
-    audioUrl: string;
-    character?: string;
-  }> | null> => {
+  // Generate audio and return a unified MP3 URL (blob: or http), or null on failure
+  const handleGenerateAudio = async (): Promise<string | null> => {
     if (!dialogData || isGeneratingAudio) return null;
 
     setIsGeneratingAudio(true);
@@ -205,14 +213,36 @@ export const DialogDisplay = ({
             ? blob
             : new Blob([blob], { type: "audio/mpeg" });
 
-        let objectUrl: string | null = null;
         try {
-          objectUrl = URL.createObjectURL(normalizedBlob);
-          setUnifiedAudioUrl(objectUrl);
+          // 1) Store raw binary for Web Audio playback
+          const arrayBuffer = await normalizedBlob.arrayBuffer();
+          unifiedAudioArrayBufferRef.current = arrayBuffer;
+
+          // 2) Also create a data: URL for download / optional <audio> usage
+          const dataUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              if (typeof reader.result === "string") {
+                resolve(reader.result);
+              } else {
+                reject(new Error("Failed to read audio blob as data URL"));
+              }
+            };
+            reader.onerror = () =>
+              reject(reader.error || new Error("FileReader error"));
+            reader.readAsDataURL(normalizedBlob);
+          });
+
+          setUnifiedAudioUrl(dataUrl);
           setUnifiedAudioErrorText(null);
           setUnifiedAudioFileName(`dialog-${Date.now()}.mp3`);
+
+          setMarkers([]); // no markers returned in blob mode
+          setAudioData([]);
+
+          return dataUrl;
         } catch (e) {
-          console.error("createObjectURL failed, showing text fallback", e);
+          console.error("Failed to prepare audio for Web Audio / download", e);
           try {
             const text = await normalizedBlob.text();
             setUnifiedAudioUrl(null);
@@ -221,17 +251,20 @@ export const DialogDisplay = ({
             setUnifiedAudioUrl(null);
             setUnifiedAudioErrorText("Audio blob could not be played.");
           }
+          return null;
         }
-
-        setMarkers([]); // no markers returned in blob mode
-        setAudioData([]);
       } else {
         // Backward compatibility: JSON payload
         const result = await response.json();
         if (result.audioUrl) {
-          setUnifiedAudioUrl(result.audioUrl as string);
+          const url = String(result.audioUrl);
+          setUnifiedAudioUrl(url);
           setMarkers(Array.isArray(result.markers) ? result.markers : []);
           setAudioData([]);
+          // In legacy URL mode we don't have raw binary for Web Audio yet.
+          // We'll re-fetch when playing.
+          unifiedAudioArrayBufferRef.current = null;
+          return url;
         } else if (Array.isArray(result.audioData)) {
           setAudioData(result.audioData);
         }
@@ -255,10 +288,9 @@ export const DialogDisplay = ({
         }
       }
 
-      // In blob or unified JSON modes, we return empty array for sentence-level audio
-      return [];
+      // In JSON legacy mode with only sentence-level audio, we don't auto-play.
+      return null;
     } catch (error) {
-      debugger;
       console.error("Failed to generate audio:", error);
       alert(
         error instanceof Error
@@ -271,37 +303,57 @@ export const DialogDisplay = ({
     }
   };
 
-  // Play all audio sequentially
+  // Play all audio (Web Audio version: decode & play from binary buffer)
   const handlePlayAll = async () => {
-    // If we already have a unified MP3 URL (no markers), play it via a simple HTMLAudioElement.
-    if (unifiedAudioUrl && markers.length === 0) {
-      try {
-        // Destroy any previous unified player
-        if (unifiedAudioRef.current) {
-          unifiedAudioRef.current.pause();
-          unifiedAudioRef.current.src = "";
-        }
-        const audioEl = new Audio(unifiedAudioUrl);
-        unifiedAudioRef.current = audioEl;
-        await audioEl.play();
-      } catch (e) {
-        console.error("Failed to play unified audio (no markers):", e);
-      }
-      return;
-    }
-
-    let audioToPlay = audioData;
-
-    if (audioToPlay.length === 0) {
-      // Generate audio first if not generated
-      const generated = await handleGenerateAudio();
-      if (!generated || generated.length === 0) {
+    // 1) Ensure we have audio binary ready
+    if (!unifiedAudioArrayBufferRef.current) {
+      const url = await handleGenerateAudio();
+      if (!url || !unifiedAudioArrayBufferRef.current) {
         return;
       }
-      audioToPlay = generated;
     }
 
-    playAllAudio(audioToPlay);
+    const arrayBuffer = unifiedAudioArrayBufferRef.current;
+    if (!arrayBuffer) return;
+
+    try {
+      if (typeof window === "undefined") return;
+
+      const AnyWindow = window as any;
+      const AudioCtx =
+        (window as any).AudioContext || AnyWindow.webkitAudioContext;
+      if (!AudioCtx) {
+        console.error("Web Audio API not supported in this browser");
+        return;
+      }
+
+      // Create or reuse audio context
+      if (!audioContextRef.current || audioContextRef.current.state === "closed") {
+        audioContextRef.current = new AudioCtx();
+      }
+      const ctx = audioContextRef.current!;
+
+      // Stop previous playback if any
+      if (audioSourceRef.current) {
+        try {
+          audioSourceRef.current.stop();
+        } catch {}
+        audioSourceRef.current.disconnect();
+        audioSourceRef.current = null;
+      }
+
+      // decodeAudioData may detach the buffer, so pass a copy
+      const bufferCopy = arrayBuffer.slice(0);
+      const audioBuffer = await ctx.decodeAudioData(bufferCopy);
+
+      const source = ctx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(ctx.destination);
+      audioSourceRef.current = source;
+      source.start(0);
+    } catch (e) {
+      console.error("Failed to play unified audio via Web Audio API:", e);
+    }
   };
 
   const playAllAudio = (
@@ -636,6 +688,14 @@ export const DialogDisplay = ({
             {t("dialog")}
           </h3>
           <div className="flex items-center gap-2">
+            {unifiedAudioUrl && (
+              <audio
+                ref={unifiedAudioRef}
+                src={unifiedAudioUrl}
+                controls
+                className="h-9"
+              />
+            )}
             {unifiedAudioUrl && (
               <button
                 onClick={() => {

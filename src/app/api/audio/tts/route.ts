@@ -6,17 +6,17 @@ export async function POST(request: Request) {
     const contentType = (
       request.headers.get("content-type") || ""
     ).toLowerCase();
-    let ssmlStr: string | undefined;
+    let text: string | undefined;
     if (contentType.startsWith("text/plain")) {
-      ssmlStr = (await request.text()) || undefined;
+      text = (await request.text()) || undefined;
     } else {
-      const maybe = await request.json().catch(() => ({} as any));
-      if (maybe && typeof maybe.ssmlStr === "string") {
-        ssmlStr = maybe.ssmlStr;
+      const maybe = await request.json().catch(() => ({}));
+      if (maybe && typeof maybe.text === "string") {
+        text = maybe.text;
       }
     }
 
-    const audio = await synthesizeTTS({ text: ssmlStr || "" });
+    const audio = await synthesizeTTS({ text: text || "" });
     return new NextResponse(audio, {
       headers: { "Content-Type": "audio/mpeg" },
     });

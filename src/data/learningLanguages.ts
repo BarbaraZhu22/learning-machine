@@ -6,6 +6,7 @@ export const learningLanguages: {
 }[] = [
   { code: "english", label: "English" },
   { code: "chinese", label: "中文" },
+  { code: "cantonese", label: "粤语" },
   { code: "spanish", label: "Español" },
   { code: "portuguese", label: "Português" },
   { code: "french", label: "Français" },

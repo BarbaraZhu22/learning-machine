@@ -8,6 +8,7 @@ export type LearningLanguageCode =
   | 'french' 
   | 'japanese' 
   | 'chinese'
+  | 'cantonese'
   | 'german'
   | 'portuguese'
   | 'italian'

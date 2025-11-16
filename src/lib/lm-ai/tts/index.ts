@@ -12,12 +12,10 @@ export async function synthesizeTTS(
   params: TTSParams
 ): Promise<ReadableStream<Uint8Array> | null> {
   const {
-    text,
+    text = "",
     speaker = "zh_female_vv_uranus_bigtts",
     audioFormat = "mp3",
     sampleRate = 24000,
-    speed = 1.0,
-    volume = 1.0,
   } = params;
 
   const VOLC_TTS_TOKEN = process.env.VOLC_TTS_TOKEN;
@@ -48,11 +46,11 @@ export async function synthesizeTTS(
           uid: "12345",
         },
         req_params: {
-          text: "其他人",
-          speaker: "zh_female_cancan_mars_bigtts",
+          text,
+          speaker,
           audio_params: {
-            format: "mp3",
-            sample_rate: 24000,
+            format: audioFormat,
+            sample_rate: sampleRate,
             enable_timestamp: true,
           },
         },
@@ -75,7 +73,7 @@ export async function synthesizeTTS(
   let lineBuffer = "";
   const audioChunks: Uint8Array[] = [];
   let totalLength = 0;
-  let sawDoneCode = false; // code === 20000000
+  // let sawDoneCode = false; // code === 20000000
 
   while (true) {
     const { done, value } = await reader.read();
@@ -87,7 +85,8 @@ export async function synthesizeTTS(
     if (!value || value.byteLength === 0) continue;
     const text = decoder.decode(value, { stream: true });
     lineBuffer += text;
-    let idx = lineBuffer.lastIndexOf("\n");
+    const idx = lineBuffer.lastIndexOf("\n");
+
     if (idx === -1) continue;
     const lines = lineBuffer.slice(0, idx).split("\n");
     lineBuffer = lineBuffer.slice(idx + 1);
@@ -114,9 +113,10 @@ export async function synthesizeTTS(
           } catch {
             // ignore base64 decode errors
           }
-        } else if (obj.code === 20000000) {
-          sawDoneCode = true;
         }
+        // } else if (obj.code === 20000000) {
+        //   sawDoneCode = true;
+        // }
       } catch {
         // ignore non-JSON lines
       }

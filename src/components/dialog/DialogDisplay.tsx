@@ -1,16 +1,12 @@
 "use client";
 
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { TypingMessageBox } from "@/components/common/TypingMessageBox";
 import { useTranslation } from "@/hooks/useTranslation";
+import { useWebAudioPlayer } from "@/hooks/useWebAudioPlayer";
 import type { FlowState } from "@/lib/lm-ai/types";
 import type { DialogRecord } from "@/types";
 import { useAppStore } from "@/store/useAppStore";
-import {
-  configureUtteranceFromVoiceSuggestion,
-  applySSMLToUtterance,
-  type SSMLConfig,
-} from "@/lib/lm-ai/ssml-config";
 
 interface DialogDisplayProps {
   flowState?: FlowState;
@@ -132,7 +128,11 @@ export const DialogDisplay = ({
   const [isPlayingAll, setIsPlayingAll] = useState(false);
   const [isSlowMode, setIsSlowMode] = useState(false); // Track slow/normal mode
   const audioBuffersRef = useRef<Map<number, AudioBuffer>>(new Map());
-  const audioSourcesRef = useRef<Map<number, AudioBufferSourceNode>>(new Map());
+  const decodePromisesRef = useRef<Map<number, Promise<AudioBuffer>>>(
+    new Map()
+  );
+  const dialogContainerRef = useRef<HTMLDivElement | null>(null);
+  const sentenceRefsRef = useRef<Map<number, HTMLDivElement>>(new Map());
 
   // Calculate current playback rate based on language and mode
   const playbackRate = useMemo(
@@ -145,13 +145,41 @@ export const DialogDisplay = ({
   const [unifiedAudioErrorText, setUnifiedAudioErrorText] = useState<
     string | null
   >(null);
+  const [sentenceErrors, setSentenceErrors] = useState<
+    Array<{
+      sentenceIndex: number;
+      character: string;
+      text: string;
+      error: string;
+    }>
+  >([]);
+  const sentenceErrorsRef = useRef<
+    Array<{
+      sentenceIndex: number;
+      character: string;
+      text: string;
+      error: string;
+    }>
+  >([]);
+  const [showSentenceErrors, setShowSentenceErrors] = useState(true);
   const [unifiedAudioFileName, setUnifiedAudioFileName] =
     useState<string>("dialog.mp3");
-  // Web Audio API: keep raw audio data and playback context
+  // Web Audio API: keep raw audio data
   const unifiedAudioArrayBufferRef = useRef<ArrayBuffer | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const audioSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const allSentenceBuffersRef = useRef<Map<number, ArrayBuffer>>(new Map());
+
+  // Web Audio Player hook
+  const webAudioPlayer = useWebAudioPlayer({
+    playbackRate,
+    onPlayingStateChange: setIsPlayingAll,
+    onCurrentIndexChange: setCurrentlyReadingIndex,
+  });
+
+  // Use the hook's audio context for decoding
+  const getOrCreateAudioContextForDecoding =
+    useCallback((): AudioContext | null => {
+      return webAudioPlayer.getOrCreateAudioContext();
+    }, [webAudioPlayer]);
 
   const dialogData = useMemo(() => {
     if (dialogRecord) {
@@ -190,8 +218,8 @@ export const DialogDisplay = ({
   // Load cached audio when dialogRecord is available
   useEffect(() => {
     if (dialogRecord?.cachedAudio && !isGeneratingAudio) {
-      loadCachedAudio().catch((error) => {
-        console.error("Failed to load cached audio on mount:", error);
+      loadCachedAudio().catch(() => {
+        // Ignore errors
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -201,53 +229,74 @@ export const DialogDisplay = ({
   useEffect(() => {
     setIsSlowMode(false);
     // Stop any playing audio when language changes
-    audioSourcesRef.current.forEach((source) => {
-      try {
-        source.stop();
-        source.disconnect();
-      } catch {}
-    });
-    audioSourcesRef.current.clear();
+    webAudioPlayer.stopAll();
     setIsPlayingAll(false);
     setCurrentlyReadingIndex(null);
-  }, [learningLanguage]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [learningLanguage]); // Only depend on learningLanguage, not webAudioPlayer
+
+  // Auto-scroll to current sentence during playback
+  useEffect(() => {
+    if (currentlyReadingIndex !== null && isPlayingAll) {
+      const sentenceElement = sentenceRefsRef.current.get(
+        currentlyReadingIndex
+      );
+      if (sentenceElement && dialogContainerRef.current) {
+        // Scroll the sentence into view
+        sentenceElement.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      }
+    }
+  }, [currentlyReadingIndex, isPlayingAll]);
 
   // Cleanup audio on unmount
   useEffect(() => {
     return () => {
       // Stop all Web Audio sources
-      audioSourcesRef.current.forEach((source) => {
-        try {
-          source.stop();
-          source.disconnect();
-        } catch {
-          // ignore stop errors
-        }
-      });
-      audioSourcesRef.current.clear();
+      webAudioPlayer.stopAll();
       audioBuffersRef.current.clear();
       allSentenceBuffersRef.current.clear();
 
-      // Cancel browser TTS
-      if (typeof window !== "undefined" && window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-      }
-      // Cleanup Web Audio playback
-      try {
-        if (audioSourceRef.current) {
-          audioSourceRef.current.stop();
-          audioSourceRef.current.disconnect();
-          audioSourceRef.current = null;
-        }
-        if (audioContextRef.current) {
-          audioContextRef.current.close();
-          audioContextRef.current = null;
-        }
-      } catch {
-        // ignore close errors
-      }
+      // Don't close AudioContext on unmount - let it be garbage collected naturally
+      // Closing it can cause issues if there are pending operations
+      // The browser will handle cleanup when the context is no longer referenced
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run on unmount, not when webAudioPlayer changes
+
+  // Check if audio is complete (all sentences have audio)
+  // If there are sentence errors, only check if all successful sentences have audio
+  const isAudioComplete = (): boolean => {
+    if (!dialogData) return false;
+    const expectedCount = dialogData.dialog.length;
+    const actualCount = allSentenceBuffersRef.current.size;
+    const errorIndices = new Set(
+      sentenceErrorsRef.current.map((err) => err.sentenceIndex)
+    );
+
+    // If we have errors, check if all non-error sentences have audio
+    if (errorIndices.size > 0) {
+      const expectedSuccessfulCount = expectedCount - errorIndices.size;
+      // Check that we have audio for all non-error sentences
+      for (let i = 0; i < expectedCount; i++) {
+        if (!errorIndices.has(i) && !allSentenceBuffersRef.current.has(i)) {
+          return false;
+        }
+      }
+      return actualCount === expectedSuccessfulCount;
+    }
+
+    // No errors: check if we have audio for all sentence indices (0 to expectedCount - 1)
+    for (let i = 0; i < expectedCount; i++) {
+      if (!allSentenceBuffersRef.current.has(i)) {
+        return false;
+      }
+    }
+
+    return actualCount === expectedCount;
+  };
 
   // Load cached audio if available
   const loadCachedAudio = async (): Promise<boolean> => {
@@ -276,78 +325,75 @@ export const DialogDisplay = ({
 
       // Load sentence audio buffers
       if (sentenceAudioBuffers && sentenceAudioBuffers.length > 0) {
-        if (typeof window !== "undefined") {
-          const AnyWindow = window as any;
-          const AudioCtx =
-            (window as any).AudioContext || AnyWindow.webkitAudioContext;
-          if (AudioCtx) {
-            if (
-              !audioContextRef.current ||
-              audioContextRef.current.state === "closed"
-            ) {
-              audioContextRef.current = new AudioCtx();
-            }
-            const ctx = audioContextRef.current;
-            if (!ctx) return false;
+        const ctx = getOrCreateAudioContextForDecoding();
+        if (!ctx) return false;
 
-            // Decode all sentence buffers
-            const decodePromises = sentenceAudioBuffers.map(
-              async (sentenceAudio) => {
-                try {
-                  const binaryString = atob(sentenceAudio.audioBase64);
-                  const bytes = new Uint8Array(binaryString.length);
-                  for (let i = 0; i < binaryString.length; i++) {
-                    bytes[i] = binaryString.charCodeAt(i);
-                  }
-                  const arrayBuffer = bytes.buffer;
-                  allSentenceBuffersRef.current.set(
-                    sentenceAudio.sentenceIndex,
-                    arrayBuffer
-                  );
-
-                  const audioBuffer = await ctx.decodeAudioData(
-                    arrayBuffer.slice(0)
-                  );
-                  audioBuffersRef.current.set(
-                    sentenceAudio.sentenceIndex,
-                    audioBuffer
-                  );
-
-                  const sentenceText =
-                    dialogData?.dialog[sentenceAudio.sentenceIndex]?.learn_text ||
-                    dialogData?.dialog[sentenceAudio.sentenceIndex]?.use_text ||
-                    "";
-
-                  return {
-                    sentenceIndex: sentenceAudio.sentenceIndex,
-                    audioBuffer: arrayBuffer,
-                    character: sentenceAudio.character,
-                    text: sentenceText,
-                  };
-                } catch (error) {
-                  console.error(
-                    `Failed to decode cached audio for sentence ${sentenceAudio.sentenceIndex}:`,
-                    error
-                  );
-                  return null;
-                }
+        // Decode all sentence buffers
+        const decodePromises = sentenceAudioBuffers.map(
+          async (sentenceAudio) => {
+            try {
+              const binaryString = atob(sentenceAudio.audioBase64);
+              const bytes = new Uint8Array(binaryString.length);
+              for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
               }
-            );
+              const arrayBuffer = bytes.buffer;
+              allSentenceBuffersRef.current.set(
+                sentenceAudio.sentenceIndex,
+                arrayBuffer
+              );
 
-            const decodedData = await Promise.all(decodePromises);
-            const validData = decodedData.filter(
-              (item): item is NonNullable<typeof item> => item !== null
-            );
+              const audioBuffer = await ctx.decodeAudioData(
+                arrayBuffer.slice(0)
+              );
+              audioBuffersRef.current.set(
+                sentenceAudio.sentenceIndex,
+                audioBuffer
+              );
 
-            setAudioData(validData);
-            return true;
+              const sentenceText =
+                dialogData?.dialog[sentenceAudio.sentenceIndex]?.learn_text ||
+                dialogData?.dialog[sentenceAudio.sentenceIndex]?.use_text ||
+                "";
+
+              return {
+                sentenceIndex: sentenceAudio.sentenceIndex,
+                audioBuffer: arrayBuffer,
+                character: sentenceAudio.character,
+                text: sentenceText,
+              };
+            } catch {
+              return null;
+            }
           }
+        );
+
+        const decodedData = await Promise.all(decodePromises);
+        const validData = decodedData.filter(
+          (item): item is NonNullable<typeof item> => item !== null
+        );
+
+        setAudioData(validData);
+
+        // Check if audio is complete after loading
+        if (!isAudioComplete()) {
+          return false; // Return false to trigger regeneration
         }
+
+        return true;
+      }
+
+      // If we only have merged audio but no sentence buffers, check completeness
+      if (
+        audioBase64 &&
+        (!sentenceAudioBuffers || sentenceAudioBuffers.length === 0)
+      ) {
+        // Can't verify completeness without sentence buffers, assume incomplete
+        return false;
       }
 
       return audioBase64 !== undefined;
-    } catch (error) {
-      console.error("Failed to load cached audio:", error);
+    } catch {
       return false;
     }
   };
@@ -360,7 +406,6 @@ export const DialogDisplay = ({
     if (dialogRecord) {
       const cachedLoaded = await loadCachedAudio();
       if (cachedLoaded) {
-        console.log("Using cached audio");
         return;
       }
     }
@@ -368,20 +413,16 @@ export const DialogDisplay = ({
     setIsGeneratingAudio(true);
 
     // Cleanup previous audio sources
-    audioSourcesRef.current.forEach((source) => {
-      try {
-        source.stop();
-        source.disconnect();
-      } catch {
-        // ignore stop errors
-      }
-    });
-    audioSourcesRef.current.clear();
+    webAudioPlayer.stopAll();
     audioBuffersRef.current.clear();
     allSentenceBuffersRef.current.clear();
+    decodePromisesRef.current.clear();
 
     setAudioData([]); // Clear previous audio data
     setUnifiedAudioErrorText(null);
+    setSentenceErrors([]); // Clear previous sentence errors
+    sentenceErrorsRef.current = []; // Clear ref
+    setShowSentenceErrors(true); // Reset error visibility
     setUnifiedAudioUrl(null);
 
     try {
@@ -463,109 +504,190 @@ export const DialogDisplay = ({
                     );
 
                     // Decode audio for playback
-                    if (typeof window !== "undefined") {
-                      const AnyWindow = window as any;
-                      const AudioCtx =
-                        (window as any).AudioContext ||
-                        AnyWindow.webkitAudioContext;
-                      if (AudioCtx) {
-                        if (
-                          !audioContextRef.current ||
-                          audioContextRef.current.state === "closed"
-                        ) {
-                          audioContextRef.current = new AudioCtx();
-                        }
-                        const ctx = audioContextRef.current;
-                        if (!ctx) return;
-
-                        ctx
-                          .decodeAudioData(arrayBuffer.slice(0))
-                          .then((audioBuffer) => {
-                            audioBuffersRef.current.set(
-                              data.sentenceIndex,
-                              audioBuffer
-                            );
-
-                            // Get text for this sentence
-                            const sentenceText =
-                              dialogData?.dialog[data.sentenceIndex]
-                                ?.learn_text ||
-                              dialogData?.dialog[data.sentenceIndex]
-                                ?.use_text ||
-                              "";
-
-                            // Add audio data for this sentence
-                            setAudioData((prev) => {
-                              const filtered = prev.filter(
-                                (item) =>
-                                  item.sentenceIndex !== data.sentenceIndex
-                              );
-                              const newData = [
-                                ...filtered,
-                                {
-                                  sentenceIndex: data.sentenceIndex,
-                                  audioBuffer: arrayBuffer,
-                                  character: data.character,
-                                  text: sentenceText,
-                                },
-                              ].sort(
-                                (a, b) => a.sentenceIndex - b.sentenceIndex
-                              );
-
-                              return newData;
-                            });
-                          })
-                          .catch((decodeError) => {
-                            console.error(
-                              `Failed to decode audio for sentence ${data.sentenceIndex}:`,
-                              decodeError
-                            );
-                          });
+                    const ctx = getOrCreateAudioContextForDecoding();
+                    if (ctx) {
+                      // Verify ArrayBuffer has data before decoding
+                      if (arrayBuffer.byteLength === 0) {
+                        return;
                       }
+
+                      // Check if it looks like MP3 data (starts with MP3 header)
+                      // Create decode promise and track it
+                      const decodePromise = ctx
+                        .decodeAudioData(arrayBuffer.slice(0))
+                        .then((audioBuffer) => {
+                          // Remove from tracking once decoded
+                          decodePromisesRef.current.delete(data.sentenceIndex);
+                          return audioBuffer;
+                        });
+
+                      // Track the promise
+                      decodePromisesRef.current.set(
+                        data.sentenceIndex,
+                        decodePromise
+                      );
+
+                      decodePromise
+                        .then((audioBuffer) => {
+                          audioBuffersRef.current.set(
+                            data.sentenceIndex,
+                            audioBuffer
+                          );
+
+                          // Get text for this sentence
+                          const sentenceText =
+                            dialogData?.dialog[data.sentenceIndex]
+                              ?.learn_text ||
+                            dialogData?.dialog[data.sentenceIndex]?.use_text ||
+                            "";
+
+                          // Add audio data for this sentence
+                          setAudioData((prev) => {
+                            const filtered = prev.filter(
+                              (item) =>
+                                item.sentenceIndex !== data.sentenceIndex
+                            );
+                            const newData = [
+                              ...filtered,
+                              {
+                                sentenceIndex: data.sentenceIndex,
+                                audioBuffer: arrayBuffer,
+                                character: data.character,
+                                text: sentenceText,
+                              },
+                            ].sort((a, b) => a.sentenceIndex - b.sentenceIndex);
+
+                            return newData;
+                          });
+
+                          // Remove from errors if it was previously in error state
+                          setSentenceErrors((prev) => {
+                            const filtered = prev.filter(
+                              (err) => err.sentenceIndex !== data.sentenceIndex
+                            );
+                            sentenceErrorsRef.current = filtered;
+                            return filtered;
+                          });
+                        })
+                        .catch(() => {
+                          // Ignore decode errors
+                        });
                     }
-                  } catch (blobError) {
-                    console.error(
-                      `Failed to process audio for sentence ${data.sentenceIndex}:`,
-                      blobError
-                    );
+                  } catch {
+                    // Ignore processing errors
                   }
-                } else {
-                  // Log error for this sentence but continue
-                  console.warn(
-                    `Failed to generate audio for sentence ${data.sentenceIndex}:`,
-                    data.error
-                  );
+                } else if (!data.success && data.error) {
+                  // Handle sentence-level error
+                  const sentenceText =
+                    dialogData?.dialog[data.sentenceIndex]?.learn_text ||
+                    dialogData?.dialog[data.sentenceIndex]?.use_text ||
+                    "";
+                  setSentenceErrors((prev) => {
+                    const filtered = prev.filter(
+                      (err) => err.sentenceIndex !== data.sentenceIndex
+                    );
+                    const newErrors = [
+                      ...filtered,
+                      {
+                        sentenceIndex: data.sentenceIndex,
+                        character: data.character || "Unknown",
+                        text: sentenceText,
+                        error: data.error || "Unknown error",
+                      },
+                    ].sort((a, b) => a.sentenceIndex - b.sentenceIndex);
+                    sentenceErrorsRef.current = newErrors;
+                    return newErrors;
+                  });
                 }
               } else if (data.type === "complete") {
                 // All sentences processed - merge into single MP3 for download
-                console.log(
-                  `Audio generation complete: ${data.totalSentences} sentences`
-                );
                 mergeAudioBuffers();
 
-                // Auto-play when all sentences are ready
-                // Use setTimeout to allow all state updates to complete
-                setTimeout(() => {
-                  // Check if we have all audio buffers ready
-                  // Wait a bit more for all buffers to be decoded
-                  const checkAndPlay = () => {
-                    const expectedCount = dialogData?.dialog.length || 0;
-                    const readyCount = audioBuffersRef.current.size;
+                // Wait for all decode promises to complete before playing
+                const expectedCount = dialogData?.dialog.length || 0;
+                const allDecodePromises = Array.from(
+                  decodePromisesRef.current.values()
+                );
 
-                    if (
-                      readyCount >= expectedCount &&
-                      !isPlayingAll &&
-                      readyCount > 0
-                    ) {
-                      handlePlayAll(playbackRate);
-                    } else if (readyCount < expectedCount) {
-                      // Some buffers might still be decoding, wait a bit more
-                      setTimeout(checkAndPlay, 100);
-                    }
-                  };
-
-                  checkAndPlay();
-                }, 300);
+                Promise.all(allDecodePromises)
+                  .then(() => {
+                    // Wait a bit for state updates and stream processing to complete
+                    // The complete message should arrive after all sentences, but we need
+                    // to ensure all sentence processing (including setting allSentenceBuffersRef) is done
+                    setTimeout(() => {
+                      const readyCount = audioBuffersRef.current.size;
+                      const bufferCount = allSentenceBuffersRef.current.size;
+                      const hasSentenceErrors = sentenceErrorsRef.current.length > 0;
+                      const audioComplete = isAudioComplete();
+                      
+                      // Double check: if we have all buffers but isAudioComplete returns false,
+                      // it might be a timing issue, give it another moment
+                      if (!hasSentenceErrors && !audioComplete && bufferCount >= expectedCount) {
+                        // Wait a bit more and check again
+                        setTimeout(() => {
+                          const finalAudioComplete = isAudioComplete();
+                          const finalBufferCount = allSentenceBuffersRef.current.size;
+                          const finalHasSentenceErrors = sentenceErrorsRef.current.length > 0;
+                          
+                          if (!finalAudioComplete && finalBufferCount < expectedCount) {
+                            setUnifiedAudioErrorText(
+                              `Audio generation incomplete: ${finalBufferCount}/${expectedCount} sentences. Please try generating again.`
+                            );
+                          } else {
+                            setUnifiedAudioErrorText(null);
+                          }
+                          
+                          // Cache audio data if complete and no errors
+                          if (finalAudioComplete && !finalHasSentenceErrors) {
+                            cacheAudioData().catch((error) => {
+                              console.error("Failed to cache audio:", error);
+                            });
+                          }
+                          
+                          setIsGeneratingAudio(false);
+                        }, 200);
+                        return;
+                      }
+                      
+                      // Only show incomplete error if there are no sentence errors
+                      // If there are sentence errors, the user already sees specific error messages
+                      if (!hasSentenceErrors && !audioComplete) {
+                        setUnifiedAudioErrorText(
+                          `Audio generation incomplete: ${bufferCount}/${expectedCount} sentences. Please try generating again.`
+                        );
+                        setIsGeneratingAudio(false);
+                        return;
+                      }
+                      
+                      // If audio is complete or we have sentence errors, clear incomplete error
+                      if (audioComplete || hasSentenceErrors) {
+                        setUnifiedAudioErrorText(null);
+                      }
+                      
+                      // Cache audio data if complete and no errors
+                      if (audioComplete && !hasSentenceErrors) {
+                        cacheAudioData().catch((error) => {
+                          console.error("Failed to cache audio:", error);
+                        });
+                      }
+                      
+                      // Auto-play if audio is complete and we have enough sentences
+                      if (
+                        audioComplete &&
+                        readyCount >= expectedCount &&
+                        !isPlayingAll &&
+                        readyCount > 0
+                      ) {
+                        handlePlayAll(playbackRate);
+                      } else {
+                        // Stop generating state
+                        setIsGeneratingAudio(false);
+                      }
+                    }, 300);
+                  })
+                  .catch(() => {
+                    setIsGeneratingAudio(false);
+                  });
               } else if (data.type === "error") {
                 // Overall error
                 setUnifiedAudioErrorText(
@@ -573,7 +695,8 @@ export const DialogDisplay = ({
                 );
               }
             } catch (parseError) {
-              console.warn("Failed to parse stream data:", line, parseError);
+              // Ignore parse errors
+              console.error(parseError);
             }
           }
         }
@@ -595,11 +718,9 @@ export const DialogDisplay = ({
                 arrayBuffer
               );
 
-              if (
-                audioContextRef.current &&
-                audioContextRef.current.state !== "closed"
-              ) {
-                audioContextRef.current
+              const ctx = getOrCreateAudioContextForDecoding();
+              if (ctx) {
+                ctx
                   .decodeAudioData(arrayBuffer.slice(0))
                   .then((audioBuffer) => {
                     audioBuffersRef.current.set(
@@ -626,15 +747,12 @@ export const DialogDisplay = ({
                     });
                   })
                   .catch((decodeError) => {
-                    console.error(
-                      `Failed to decode audio for sentence ${data.sentenceIndex}:`,
-                      decodeError
-                    );
+                    // Ignore decode errors
                   });
               }
             }
           } catch (parseError) {
-            console.warn("Failed to parse final buffer:", buffer, parseError);
+            // Ignore parse errors
           }
         }
 
@@ -672,10 +790,9 @@ export const DialogDisplay = ({
           setUnifiedAudioErrorText(null);
           setUnifiedAudioFileName(`dialog-${Date.now()}.mp3`);
           setAudioData([]);
-        } catch (e) {
-          console.error("Failed to prepare audio for Web Audio / download", e);
-            setUnifiedAudioUrl(null);
-            setUnifiedAudioErrorText("Audio blob could not be played.");
+        } catch {
+          setUnifiedAudioUrl(null);
+          setUnifiedAudioErrorText("Audio blob could not be played.");
         }
       } else {
         // Legacy JSON format
@@ -690,7 +807,6 @@ export const DialogDisplay = ({
         }
       }
     } catch (error) {
-      console.error("Failed to generate audio:", error);
       setUnifiedAudioErrorText(
         error instanceof Error
           ? error.message
@@ -708,7 +824,7 @@ export const DialogDisplay = ({
       .map(([, buffer]) => buffer);
 
     if (buffers.length === 0) {
-        return;
+      return;
     }
 
     try {
@@ -733,52 +849,85 @@ export const DialogDisplay = ({
       const blobUrl = URL.createObjectURL(blob);
       setUnifiedAudioUrl(blobUrl);
       setUnifiedAudioFileName(`dialog-${Date.now()}.mp3`);
-
-      // Cache audio if total size < 300KB
-      const sizeInKB = totalLength / 1024;
-      if (sizeInKB < 300 && dialogRecord) {
-        try {
-          const { indexedDbClient } = await import("@/lib/indexedDb");
-          
-          // Convert merged buffer to base64
-          const mergedBase64 = arrayBufferToBase64(mergedBuffer);
-          
-          // Convert sentence buffers to base64
-          const sentenceAudioBuffers = Array.from(
-            allSentenceBuffersRef.current.entries()
-          )
-            .sort((a, b) => a[0] - b[0])
-            .map(([sentenceIndex, buffer]) => {
-              if (!buffer) return null;
-              
-              const sentenceBase64 = arrayBufferToBase64(buffer);
-              const character = dialogData?.dialog[sentenceIndex]?.character;
-              
-              return {
-                sentenceIndex,
-                audioBase64: sentenceBase64,
-                character,
-              };
-            })
-            .filter((item): item is NonNullable<typeof item> => item !== null);
-
-          const updated: DialogRecord = {
-            ...dialogRecord,
-            cachedAudio: {
-              audioBase64: mergedBase64,
-              sentenceAudioBuffers,
-            },
-            updatedAt: new Date().toISOString(),
-          };
-          
-          await indexedDbClient.saveDialog(updated);
-          console.log(`Audio cached (${sizeInKB.toFixed(1)}KB)`);
-        } catch (error) {
-          console.error("Failed to cache audio:", error);
-        }
-      }
     } catch (error) {
-      console.error("Failed to merge audio buffers:", error);
+      // Failed to merge audio buffers
+    }
+  };
+
+  // Cache audio data to IndexedDB
+  const cacheAudioData = async () => {
+    if (!dialogRecord || !isAudioComplete()) {
+      return;
+    }
+
+    try {
+      const { indexedDbClient } = await import("@/lib/indexedDb");
+      const mergedBuffer = unifiedAudioArrayBufferRef.current;
+
+      if (!mergedBuffer) {
+        // If no merged buffer, create it from sentence buffers
+        const buffers = Array.from(allSentenceBuffersRef.current.entries())
+          .sort((a, b) => a[0] - b[0])
+          .map(([, buffer]) => buffer);
+
+        if (buffers.length === 0) {
+          return;
+        }
+
+        let totalLength = 0;
+        buffers.forEach((buffer) => {
+          totalLength += buffer.byteLength;
+        });
+
+        const merged = new Uint8Array(totalLength);
+        let offset = 0;
+        buffers.forEach((buffer) => {
+          merged.set(new Uint8Array(buffer), offset);
+          offset += buffer.byteLength;
+        });
+
+        unifiedAudioArrayBufferRef.current = merged.buffer;
+      }
+
+      const finalMergedBuffer = unifiedAudioArrayBufferRef.current;
+      if (!finalMergedBuffer) {
+        return;
+      }
+
+      const mergedBase64 = arrayBufferToBase64(finalMergedBuffer);
+
+      // Convert sentence buffers to base64
+      const sentenceAudioBuffers = Array.from(
+        allSentenceBuffersRef.current.entries()
+      )
+        .sort((a, b) => a[0] - b[0])
+        .map(([sentenceIndex, buffer]) => {
+          if (!buffer) return null;
+
+          const sentenceBase64 = arrayBufferToBase64(buffer);
+          const character = dialogData?.dialog[sentenceIndex]?.character;
+
+          return {
+            sentenceIndex,
+            audioBase64: sentenceBase64,
+            character,
+          };
+        })
+        .filter((item): item is NonNullable<typeof item> => item !== null);
+
+      const updated: DialogRecord = {
+        ...dialogRecord,
+        cachedAudio: {
+          audioBase64: mergedBase64,
+          sentenceAudioBuffers,
+        },
+        updatedAt: new Date().toISOString(),
+      };
+
+      await indexedDbClient.saveDialog(updated);
+    } catch (error) {
+      // Ignore cache errors
+      console.error("Failed to cache audio data:", error);
     }
   };
 
@@ -792,277 +941,59 @@ export const DialogDisplay = ({
     return btoa(binary);
   };
 
-  // Common function to play audio buffer with adjustable speed
-  const playAudioBuffer = async (
-    audioBuffer: AudioBuffer,
-    options?: {
-      rate?: number;
-      onEnded?: () => void;
-      sentenceIndex?: number;
-    }
-  ) => {
-      if (typeof window === "undefined") return;
-
-      const AnyWindow = window as any;
-      const AudioCtx =
-        (window as any).AudioContext || AnyWindow.webkitAudioContext;
-      if (!AudioCtx) {
-        console.error("Web Audio API not supported in this browser");
-        return;
-      }
-
-    if (
-      !audioContextRef.current ||
-      audioContextRef.current.state === "closed"
-    ) {
-        audioContextRef.current = new AudioCtx();
-      }
-
-    const ctx = audioContextRef.current;
-    if (!ctx) return;
-
-    const rate = options?.rate ?? playbackRate;
-    const source = ctx.createBufferSource();
-    source.buffer = audioBuffer;
-    source.playbackRate.value = rate;
-    source.connect(ctx.destination);
-
-    if (options?.sentenceIndex !== undefined) {
-      audioSourcesRef.current.set(options.sentenceIndex, source);
-    } else {
-      if (audioSourceRef.current) {
-        try {
-          audioSourceRef.current.stop();
-        } catch {}
-        audioSourceRef.current.disconnect();
-      }
-      audioSourceRef.current = source;
-    }
-
-    source.onended = () => {
-      if (options?.sentenceIndex !== undefined) {
-        audioSourcesRef.current.delete(options.sentenceIndex);
-      }
-      options?.onEnded?.();
-    };
-
-      source.start(0);
-  };
-
   // Play all audio using Web Audio API
   const handlePlayAll = async (rate?: number) => {
+    // Prevent multiple simultaneous playbacks
+    if (isPlayingAll) {
+      // Already playing, ignoring duplicate play request
+      return;
+    }
+
     const playRate = rate ?? playbackRate;
 
     // If we have sentence-level audio buffers, play them sequentially
     if (audioData.length > 0 && audioBuffersRef.current.size > 0) {
-      await playAllSentencesWithWebAudio(playRate);
+      await webAudioPlayer.playAllSentences(audioBuffersRef.current, playRate);
       return;
     }
 
     // If we have unified audio, use that
     if (unifiedAudioArrayBufferRef.current) {
-      await playUnifiedAudio(playRate);
-            return;
-          }
+      await webAudioPlayer.playUnifiedAudio(
+        unifiedAudioArrayBufferRef.current,
+        playRate
+      );
+      return;
+    }
 
     // Otherwise, generate audio first
     await handleGenerateAudio();
     await new Promise((resolve) => setTimeout(resolve, 500));
     if (audioData.length > 0 && audioBuffersRef.current.size > 0) {
-      await playAllSentencesWithWebAudio(playRate);
+      await webAudioPlayer.playAllSentences(audioBuffersRef.current, playRate);
     }
-  };
-
-  // Play unified audio using Web Audio API
-  const playUnifiedAudio = async (rate?: number) => {
-    const arrayBuffer = unifiedAudioArrayBufferRef.current;
-    if (!arrayBuffer) return;
-
-    try {
-      if (
-        !audioContextRef.current ||
-        audioContextRef.current.state === "closed"
-      ) {
-        const AnyWindow = window as any;
-        const AudioCtx =
-          (window as any).AudioContext || AnyWindow.webkitAudioContext;
-        audioContextRef.current = new AudioCtx();
-      }
-
-      const ctx = audioContextRef.current;
-      if (!ctx) return;
-
-      const bufferCopy = arrayBuffer.slice(0);
-      const audioBuffer = await ctx.decodeAudioData(bufferCopy);
-
-      setIsPlayingAll(true);
-      await playAudioBuffer(audioBuffer, {
-        rate: rate ?? playbackRate,
-        onEnded: () => {
-        setIsPlayingAll(false);
-        setCurrentlyReadingIndex(null);
-        },
-      });
-    } catch (e) {
-      console.error("Failed to play unified audio via Web Audio API:", e);
-      setIsPlayingAll(false);
-    }
-  };
-
-  // Play all sentences sequentially using Web Audio API
-  const playAllSentencesWithWebAudio = async (rate?: number) => {
-    if (typeof window === "undefined") return;
-
-    const playRate = rate ?? playbackRate;
-
-    // Stop any currently playing sources
-    audioSourcesRef.current.forEach((source) => {
-      try {
-        source.stop();
-        source.disconnect();
-      } catch {}
-    });
-    audioSourcesRef.current.clear();
-
-    setIsPlayingAll(true);
-    setCurrentlyReadingIndex(0);
-
-    const sortedIndices = Array.from(audioBuffersRef.current.keys()).sort(
-      (a, b) => a - b
-    );
-
-      let currentIndex = 0;
-
-      const playNext = async () => {
-      if (currentIndex >= sortedIndices.length) {
-          setIsPlayingAll(false);
-          setCurrentlyReadingIndex(null);
-          return;
-        }
-
-      const sentenceIndex = sortedIndices[currentIndex];
-      const audioBuffer = audioBuffersRef.current.get(sentenceIndex);
-
-      if (!audioBuffer) {
-          currentIndex++;
-          playNext();
-        return;
-      }
-
-      setCurrentlyReadingIndex(sentenceIndex);
-
-      try {
-        await playAudioBuffer(audioBuffer, {
-          rate: playRate,
-          sentenceIndex,
-          onEnded: () => {
-            currentIndex++;
-      playNext();
-          },
-        });
-      } catch (error) {
-        console.error(
-          `Failed to start playback for sentence ${sentenceIndex}:`,
-          error
-        );
-        currentIndex++;
-          playNext();
-      }
-      };
-
-      playNext();
-  };
-
-  // Play browser TTS for a text (uses voiceSuggestions only)
-  const playBrowserTTS = (
-    text: string,
-    language?: string,
-    characterName?: string,
-    sentenceIndex?: number
-  ): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      if (typeof window === "undefined" || !window.speechSynthesis) {
-        reject(new Error("Browser Speech Synthesis not supported"));
-        return;
-      }
-
-      // Cancel any ongoing speech
-      window.speechSynthesis.cancel();
-
-      const utterance = new SpeechSynthesisUtterance(text);
-
-      // Get available voices
-      const voices = window.speechSynthesis.getVoices();
-
-      // Parse voice suggestion (legacy) — SSML document is used only on the server
-      const voiceSuggestion = characterName
-        ? voiceSuggestions?.[characterName]
-        : undefined;
-      configureUtteranceFromVoiceSuggestion(
-        utterance,
-        voiceSuggestion,
-        language,
-        voices
-      );
-      utterance.onend = () => resolve();
-
-      utterance.onerror = (error) => reject(error);
-
-      window.speechSynthesis.speak(utterance);
-    });
   };
 
   // Play single sentence using Web Audio API
   const handlePlaySentence = async (index: number, rate?: number) => {
-    // Stop any currently playing audio
-      setIsPlayingAll(false);
-
-    // Stop all Web Audio sources
-    audioSourcesRef.current.forEach((source) => {
-      try {
-        source.stop();
-        source.disconnect();
-      } catch {}
-    });
-    audioSourcesRef.current.clear();
-
     if (typeof window === "undefined") return;
+
+    // Stop any currently playing audio first
+    if (isPlayingAll) {
+      webAudioPlayer.stopAll();
+      setIsPlayingAll(false);
+    }
 
     const playRate = rate ?? playbackRate;
 
     // Use Web Audio API to play sentence buffer
     const audioBuffer = audioBuffersRef.current.get(index);
     if (!audioBuffer) {
-      // Fallback to browser TTS if no audio buffer
-      const entry = dialogData?.dialog[index];
-      if (entry) {
-        try {
-          await playBrowserTTS(
-            entry.learn_text || entry.use_text,
-            learningLanguage,
-            entry.character,
-            index
-          );
-      } catch (error) {
-        console.error("Failed to play browser TTS:", error);
-        }
-      }
-          return;
-        }
-
-    try {
-      setCurrentlyReadingIndex(index);
-      await playAudioBuffer(audioBuffer, {
-        rate: playRate,
-        sentenceIndex: index,
-        onEnded: () => {
-          setCurrentlyReadingIndex(null);
-        },
-      });
-    } catch (error) {
-      console.error(`Failed to play sentence ${index}:`, error);
-      setCurrentlyReadingIndex(null);
+      // No audio buffer available
+      return;
     }
+
+    await webAudioPlayer.playSentence(index, audioBuffer, playRate);
   };
 
   if (!dialogData) {
@@ -1100,8 +1031,56 @@ export const DialogDisplay = ({
     >
       {unifiedAudioErrorText && (
         <div className="mx-4 my-2 rounded border border-red-300 bg-red-50 p-3 text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200">
-          <div className="text-xs font-mono whitespace-pre-wrap break-words">
-            {unifiedAudioErrorText}
+          <div className="flex items-start justify-between gap-2">
+            <div className="text-xs font-mono whitespace-pre-wrap break-words flex-1">
+              {unifiedAudioErrorText}
+            </div>
+            <button
+              onClick={() => setUnifiedAudioErrorText(null)}
+              className="text-red-600 dark:text-red-300 hover:text-red-800 dark:hover:text-red-100 transition-colors px-2 py-1 rounded flex-shrink-0"
+              title="关闭"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+      {sentenceErrors.length > 0 && showSentenceErrors && (
+        <div className="mx-4 my-2 rounded border border-red-300 bg-red-50 p-3 text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200">
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-sm font-semibold">
+              句子错误 ({sentenceErrors.length}):
+            </div>
+            <button
+              onClick={() => setShowSentenceErrors(false)}
+              className="text-red-600 dark:text-red-300 hover:text-red-800 dark:hover:text-red-100 transition-colors px-2 py-1 rounded"
+              title="关闭"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="space-y-2 max-h-60 overflow-y-auto">
+            {sentenceErrors.map((err) => (
+              <div
+                key={err.sentenceIndex}
+                className="text-xs font-mono whitespace-pre-wrap break-words border-l-2 border-red-400 pl-2"
+              >
+                <div className="font-semibold">
+                  句子 #{err.sentenceIndex + 1} ({err.character}):
+                </div>
+                <div className="text-red-600 dark:text-red-300 mt-1">
+                  {err.error}
+                </div>
+                {err.text && (
+                  <div className="text-red-500 dark:text-red-400 mt-1 opacity-75">
+                    文本:{" "}
+                    {err.text.length > 50
+                      ? `${err.text.substring(0, 50)}...`
+                      : err.text}
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -1122,7 +1101,7 @@ export const DialogDisplay = ({
                     a.click();
                     document.body.removeChild(a);
                   } catch (e) {
-                    console.error("Failed to trigger download", e);
+                    // Ignore download errors
                   }
                 }}
                 className="rounded-md px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium text-primary-700 dark:text-primary-200 transition hover:bg-primary-100 dark:hover:bg-primary-900/30"
@@ -1137,13 +1116,7 @@ export const DialogDisplay = ({
                 setIsSlowMode(newSlowMode);
                 if (isPlayingAll) {
                   // Stop current playback and restart with new rate
-                  audioSourcesRef.current.forEach((source) => {
-                    try {
-                      source.stop();
-                      source.disconnect();
-                    } catch {}
-                  });
-                  audioSourcesRef.current.clear();
+                  webAudioPlayer.stopAll();
                   setIsPlayingAll(false);
                   const newRate = getPlaybackSpeedForLanguage(
                     learningLanguage,
@@ -1169,8 +1142,14 @@ export const DialogDisplay = ({
               {isSlowMode ? `${t("normal")}` : `${t("slow")}`}
             </button>
             <button
-              onClick={() => handlePlayAll(playbackRate)}
-              disabled={isGeneratingAudio}
+              onClick={() => {
+                if (!isAudioComplete()) {
+                  handleGenerateAudio();
+                } else {
+                  handlePlayAll(playbackRate);
+                }
+              }}
+              disabled={isGeneratingAudio || isPlayingAll}
               className="rounded-md px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium text-primary-600 dark:text-primary-400 transition hover:bg-primary-100 dark:hover:bg-primary-900/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
             >
               {isGeneratingAudio ? (
@@ -1205,18 +1184,12 @@ export const DialogDisplay = ({
             {t("dialog")}
           </h3>
           <div className="flex items-center gap-2">
-          <button
+            <button
               onClick={() => {
                 const newSlowMode = !isSlowMode;
                 setIsSlowMode(newSlowMode);
                 if (isPlayingAll) {
-                  audioSourcesRef.current.forEach((source) => {
-                    try {
-                      source.stop();
-                      source.disconnect();
-                    } catch {}
-                  });
-                  audioSourcesRef.current.clear();
+                  webAudioPlayer.stopAll();
                   setIsPlayingAll(false);
                   const newRate = getPlaybackSpeedForLanguage(
                     learningLanguage,
@@ -1242,31 +1215,38 @@ export const DialogDisplay = ({
               {isSlowMode ? `▶ ${t("normal")}` : `🐌 ${t("slow")}`}
             </button>
             <button
-              onClick={() => handlePlayAll(playbackRate)}
-              disabled={isGeneratingAudio}
-            className="rounded-md px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium text-primary-600 dark:text-primary-400 transition hover:bg-primary-100 dark:hover:bg-primary-900/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
-          >
-            {isGeneratingAudio ? (
-              <>
-                <span className="animate-spin">⏳</span>
-                <span>{t("generating") || "Generating..."}</span>
-              </>
-            ) : isPlayingAll ? (
-              <>
-                <span>⏸</span>
-                <span>{t("playing") || "Playing..."}</span>
-              </>
-            ) : (
-              <>
-                <span>🔊</span>
-                <span>{t("readAll") || "Read All"}</span>
-              </>
-            )}
-          </button>
+              onClick={() => {
+                if (!isAudioComplete()) {
+                  handleGenerateAudio();
+                } else {
+                  handlePlayAll(playbackRate);
+                }
+              }}
+              disabled={isGeneratingAudio || isPlayingAll}
+              className="rounded-md px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium text-primary-600 dark:text-primary-400 transition hover:bg-primary-100 dark:hover:bg-primary-900/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+            >
+              {isGeneratingAudio ? (
+                <>
+                  <span className="animate-spin">⏳</span>
+                  <span>{t("generating") || "Generating..."}</span>
+                </>
+              ) : isPlayingAll ? (
+                <>
+                  <span>⏸</span>
+                  <span>{t("playing") || "Playing..."}</span>
+                </>
+              ) : (
+                <>
+                  <span>🔊</span>
+                  <span>{t("readAll") || "Read All"}</span>
+                </>
+              )}
+            </button>
           </div>
         </div>
       )}
       <div
+        ref={dialogContainerRef}
         className={`space-y-4 ${
           isFullPage ? "flex-1 overflow-y-auto p-4 sm:p-6" : ""
         }`}
@@ -1278,6 +1258,13 @@ export const DialogDisplay = ({
           return (
             <div
               key={index}
+              ref={(el) => {
+                if (el) {
+                  sentenceRefsRef.current.set(index, el);
+                } else {
+                  sentenceRefsRef.current.delete(index);
+                }
+              }}
               className={`flex ${isLeft ? "justify-start" : "justify-end"}`}
             >
               <div
@@ -1298,11 +1285,13 @@ export const DialogDisplay = ({
                   {hasAudio && (
                     <button
                       onClick={() => handlePlaySentence(index)}
-                      disabled={currentlyReadingIndex === index && isPlayingAll}
+                      disabled={isPlayingAll}
                       className="text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 disabled:opacity-50 transition-colors"
                       title={t("playSentence") || "Play this sentence"}
                     >
-                      {currentlyReadingIndex === index ? "⏸" : "▶"}
+                      {currentlyReadingIndex === index && isPlayingAll
+                        ? "⏸"
+                        : "▶"}
                     </button>
                   )}
                 </div>

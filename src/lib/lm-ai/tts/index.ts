@@ -13,6 +13,14 @@ export interface TTSParams {
 }
 
 /**
+ * Count characters in text (excluding leading/trailing whitespace)
+ * Simple character-based limit for all languages
+ */
+function countCharacters(text: string): number {
+  return text.trim().length;
+}
+
+/**
  * Apply text transformations based on language-specific rules
  * Ensures that already replaced text is not replaced again
  */
@@ -33,8 +41,8 @@ function applySpeakFix(
   for (const rule of fixRules) {
     // Use the regex directly, ensure it has global flag
     let regex = rule.regex;
-    if (!regex.flags.includes('g')) {
-      regex = new RegExp(regex.source, regex.flags + 'g');
+    if (!regex.flags.includes("g")) {
+      regex = new RegExp(regex.source, regex.flags + "g");
     }
 
     // Replace with callback: wrap replacement with markers to protect it
@@ -42,16 +50,18 @@ function applySpeakFix(
       // Get offset (position of match in string)
       // replace callback: (match, ...capturedGroups, offset, string)
       const offset = args[args.length - 2] as number;
-      
+
       // Check if this match is inside a marked (protected) segment
       const textBeforeMatch = result.substring(0, offset);
-      const markerCountBefore = (textBeforeMatch.match(new RegExp(MARKER, "g")) || []).length;
-      
+      const markerCountBefore = (
+        textBeforeMatch.match(new RegExp(MARKER, "g")) || []
+      ).length;
+
       // If inside a protected segment (odd number of markers), return original match
       if (markerCountBefore % 2 === 1) {
         return match;
       }
-      
+
       // Otherwise, wrap replacement with markers
       return MARKER + rule.replacement + MARKER;
     });
@@ -73,6 +83,15 @@ export async function synthesizeTTS(
     sampleRate = 24000,
     lan,
   } = params;
+
+  // Check character limit (150 characters max, roughly equivalent to 30 words)
+  const charCount = countCharacters(text);
+  const MAX_CHARACTERS = 222;
+  if (charCount > MAX_CHARACTERS) {
+    throw new Error(
+      `TTS请求文本过长: ${charCount} 字符，最大允许 ${MAX_CHARACTERS} 字符`
+    );
+  }
 
   // Apply text transformations based on language
   const processedText = applySpeakFix(text, lan);

@@ -16,23 +16,23 @@ export const DialogsList = ({ onSelectDialog, onClose }: DialogsListProps) => {
   const [dialogs, setDialogs] = useState<DialogRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const loadDialogs = async () => {
-      try {
-        const allDialogs = await indexedDbClient.getAllDialogs();
-        // Sort by createdAt descending (newest first)
-        const sorted = allDialogs.sort(
-          (a, b) =>
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        );
-        setDialogs(sorted);
-      } catch (error) {
-        console.error("Failed to load dialogs:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
+  const loadDialogs = async () => {
+    try {
+      const allDialogs = await indexedDbClient.getAllDialogs();
+      // Sort by createdAt descending (newest first)
+      const sorted = allDialogs.sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+      setDialogs(sorted);
+    } catch (error) {
+      console.error("Failed to load dialogs:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     loadDialogs();
   }, []);
 
@@ -73,6 +73,27 @@ export const DialogsList = ({ onSelectDialog, onClose }: DialogsListProps) => {
                   key={dialog.id}
                   dialog={dialog}
                   onClick={() => onSelectDialog(dialog)}
+                  onDelete={async () => {
+                    try {
+                      await indexedDbClient.deleteDialog(dialog.id);
+                      await loadDialogs();
+                    } catch (error) {
+                      console.error("Failed to delete dialog:", error);
+                    }
+                  }}
+                  onRename={async (newName: string) => {
+                    try {
+                      const updated: DialogRecord = {
+                        ...dialog,
+                        name: newName,
+                        updatedAt: new Date().toISOString(),
+                      };
+                      await indexedDbClient.saveDialog(updated);
+                      await loadDialogs();
+                    } catch (error) {
+                      console.error("Failed to rename dialog:", error);
+                    }
+                  }}
                 />
               ))}
             </div>

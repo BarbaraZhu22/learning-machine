@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "@/hooks/useTranslation";
 import type { DialogRecord } from "@/types";
 
@@ -21,6 +21,7 @@ export const DialogCard = ({
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(dialog.name || "");
   const [showActions, setShowActions] = useState(true);
+  const prevDialogNameRef = useRef(dialog.name);
 
   const characters = dialog.dialogContent?.characters || [];
   const dialogEntries = dialog.dialogContent?.dialog || [];
@@ -41,15 +42,21 @@ export const DialogCard = ({
   );
 
   // Sync renameValue with dialog.name changes (only when not actively renaming)
+  // Use ref to track previous value and update asynchronously to avoid cascading renders
   useEffect(() => {
-    if (!isRenaming) {
-      // Only update if the dialog name actually changed
+    if (!isRenaming && prevDialogNameRef.current !== dialog.name) {
       const newName = dialog.name || "";
-      setRenameValue((prev) => {
-        // Only update if different to avoid unnecessary re-renders
-        return prev !== newName ? newName : prev;
-      });
+      prevDialogNameRef.current = dialog.name;
+      // Schedule state update in next tick to avoid synchronous setState in effect
+      const timeoutId = setTimeout(() => {
+        setRenameValue((prev) => {
+          // Only update if different to avoid unnecessary re-renders
+          return prev !== newName ? newName : prev;
+        });
+      }, 0);
+      return () => clearTimeout(timeoutId);
     }
+    prevDialogNameRef.current = dialog.name;
   }, [dialog.name, isRenaming]);
 
   const handleRename = () => {
@@ -154,4 +161,3 @@ export const DialogCard = ({
     </div>
   );
 };
-

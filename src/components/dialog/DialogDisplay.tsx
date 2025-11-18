@@ -996,6 +996,23 @@ export const DialogDisplay = ({
     await webAudioPlayer.playSentence(index, audioBuffer, playRate);
   };
 
+  // Determine which side each character appears on
+  // Must be called before early return to satisfy React Hooks rules
+  const characterPositions = useMemo(() => {
+    if (!dialogData) {
+      return {};
+    }
+    const positions: Record<string, "left" | "right"> = {};
+    const characters = dialogData.characters;
+    if (characters.length >= 1) {
+      positions[characters[0]] = "left";
+    }
+    if (characters.length >= 2) {
+      positions[characters[1]] = "right";
+    }
+    return positions;
+  }, [dialogData]);
+
   if (!dialogData) {
     return (
       <div className="rounded-lg border border-surface-200/50 bg-[color:var(--glass-base)] p-4 shadow-lg shadow-primary-100/40 backdrop-blur dark:border-surface-700 dark:bg-surface-900">
@@ -1005,18 +1022,6 @@ export const DialogDisplay = ({
   }
 
   const { characters, dialog } = dialogData;
-
-  // Determine which side each character appears on
-  const characterPositions = useMemo(() => {
-    const positions: Record<string, "left" | "right"> = {};
-    if (characters.length >= 1) {
-      positions[characters[0]] = "left";
-    }
-    if (characters.length >= 2) {
-      positions[characters[1]] = "right";
-    }
-    return positions;
-  }, [characters]);
 
   const isFullPage = !!onClose;
   const hasAudio = audioData.length > 0;

@@ -231,7 +231,7 @@ export default function DialogPage() {
             </p>
           </div>
         ) : (
-          <div className="max-h-[600px] overflow-y-auto pr-2">
+          <div className="max-h-[600px] overflow-y-auto pr-2 pt-1 pb-1">
             <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
               {dialogs.map((dialog) => (
                 <DialogCard

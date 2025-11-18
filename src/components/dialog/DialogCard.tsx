@@ -79,7 +79,7 @@ export const DialogCard = ({
 
   return (
     <div
-      className="relative group flex flex-col items-center justify-center rounded-lg border border-surface-200/50 bg-[color:var(--glass-base)] p-6 shadow-lg shadow-primary-100/40 transition-all hover:scale-105 hover:shadow-xl hover:shadow-primary-200/50 dark:border-surface-700 dark:bg-surface-900 dark:hover:shadow-primary-800/50"
+      className="relative group flex flex-col items-center justify-center rounded-lg border border-surface-200/50 bg-[color:var(--glass-base)] p-6 shadow-lg shadow-primary-100/40 transition-all hover:scale-101 hover:shadow-xl hover:shadow-primary-200/50 dark:border-surface-700 dark:bg-surface-900 dark:hover:shadow-primary-800/50"
       onMouseEnter={() => !isRenaming && setShowActions(true)}
       onMouseLeave={() => !isRenaming && setShowActions(false)}
     >

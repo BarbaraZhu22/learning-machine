@@ -269,7 +269,8 @@ const spanish = [
   // =====================
   //  3. C 系列（次优先）
   // =====================
-
+  // 特殊上下文 uch → uthi
+  { original: "uch(?=[oa])", replacement: "utchi", regex: /uch(?=[oa])/gi },
   // ce / ci → se / si
   { original: "ce/ci", replacement: "s", regex: /c(?=[eéií])/gi },
 

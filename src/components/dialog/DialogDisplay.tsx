@@ -7,6 +7,10 @@ import { useWebAudioPlayer } from "@/hooks/useWebAudioPlayer";
 import type { FlowState } from "@/lib/lm-ai/types";
 import type { DialogRecord } from "@/types";
 import { useAppStore } from "@/store/useAppStore";
+import {
+  checkAudioGenerationLimit,
+  incrementAudioGenerationCount,
+} from "@/components/dialog/audioGenerationLimits";
 
 interface DialogDisplayProps {
   flowState?: FlowState;
@@ -410,6 +414,14 @@ export const DialogDisplay = ({
       }
     }
 
+    // Check daily audio generation limit
+    const limitCheck = checkAudioGenerationLimit();
+    if (!limitCheck.canGenerate) {
+      const limitMessage = t("audioGenerationLimitMessage");
+      setUnifiedAudioErrorText(limitMessage);
+      return;
+    }
+
     setIsGeneratingAudio(true);
 
     // Cleanup previous audio sources
@@ -639,6 +651,8 @@ export const DialogDisplay = ({
                           
                           // Cache audio data if complete and no errors
                           if (finalAudioComplete && !finalHasSentenceErrors) {
+                            // Increment generation count on successful completion
+                            incrementAudioGenerationCount();
                             cacheAudioData().catch((error) => {
                               console.error("Failed to cache audio:", error);
                             });
@@ -666,6 +680,8 @@ export const DialogDisplay = ({
                       
                       // Cache audio data if complete and no errors
                       if (audioComplete && !hasSentenceErrors) {
+                        // Increment generation count on successful completion
+                        incrementAudioGenerationCount();
                         cacheAudioData().catch((error) => {
                           console.error("Failed to cache audio:", error);
                         });

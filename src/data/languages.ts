@@ -104,6 +104,9 @@ export const translations: LanguageCatalog = {
     readAll: "read all",
     slow: "slow",
     normal: "normal",
+    audioGenerationLimitReached: "Daily audio generation limit reached",
+    audioGenerationLimitMessage: "You have reached the daily limit of 3 audio generations. Please try again tomorrow.",
+    audioGenerationRemaining: "Remaining audio generations today: {count}",
   },
   zh: {
     appTitle: "学习机",
@@ -201,6 +204,9 @@ export const translations: LanguageCatalog = {
     readAll: "播放整段",
     slow: "慢速",
     normal: "正常",
+    audioGenerationLimitReached: "已达到每日音频生成次数限制",
+    audioGenerationLimitMessage: "您已达到每日3次音频生成的限制。请明天再试。",
+    audioGenerationRemaining: "今日剩余音频生成次数：{count}",
   },
 };
 

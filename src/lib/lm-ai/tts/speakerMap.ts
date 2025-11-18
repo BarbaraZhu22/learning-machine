@@ -233,79 +233,348 @@ export function getVoicesByLanguage(
   return doubao10Voices.filter((voice) => voice.lan === "中文");
 }
 
+const spanish = [
+  // =====================
+  //  0. 重音模拟（最先处理）
+  // =====================
+
+  // 我们将重音元音加长，例如：
+  // á → aa，é → ee，í → ii，ó → oo，ú → uu
+  // 让 TTS 明显读出“重音 syllable”
+
+  { original: "á", replacement: "aa", regex: /á/gi },
+  { original: "é", replacement: "ee", regex: /é/gi },
+  { original: "í", replacement: "ii", regex: /í/gi },
+  { original: "ó", replacement: "oo", regex: /ó/gi },
+  { original: "ú", replacement: "uu", regex: /ú/gi },
+
+  // =====================
+  //  1. 特殊字母
+  // =====================
+
+  { original: "ñ", replacement: "ny", regex: /ñ/gi },
+  { original: "ll", replacement: "y", regex: /ll/gi },
+  { original: "rr", replacement: "rrr", regex: /rr/gi },
+
+  // =====================
+  //  2. G 系列（优先：必须在 C 和元音转换之前）
+  // =====================
+
+  { original: "gue", replacement: "khe", regex: /gue/gi },
+  { original: "gui", replacement: "khi", regex: /gui/gi },
+
+  // ge / gi → kh
+  { original: "ge/gi", replacement: "kh", regex: /g(?=[eéií])/gi },
+
+  // =====================
+  //  3. C 系列（次优先）
+  // =====================
+
+  // ce / ci → se / si
+  { original: "ce/ci", replacement: "s", regex: /c(?=[eéií])/gi },
+
+  // 其他所有 c → k
+  { original: "c", replacement: "k", regex: /c/gi },
+
+  // =====================
+  //  4. QU 系列
+  // =====================
+
+  // que / qui → ke / ki
+  { original: "que/qui", replacement: "k", regex: /qu(?=[ei])/gi },
+
+  // =====================
+  //  5. J 系列
+  // =====================
+
+  { original: "j", replacement: "kh", regex: /j/gi },
+
+  // =====================
+  //  6. Y 系列（必须在辅音规则后、元音规则前）
+  // =====================
+
+  // 6.1 词尾 y → i
+  {
+    original: "y_word_end",
+    replacement: "i",
+    regex: /y(?=$|[\s.,!?;:])/gi,
+  },
+
+  // 6.2 y + 元音 → j （西语 /ʝ/）
+  { original: "y+vowel", replacement: "j", regex: /y(?=[aeiouáéíóú])/gi },
+
+  // =====================
+  //  7. 其它辅音
+  // =====================
+
+  { original: "z", replacement: "s", regex: /z/gi },
+  { original: "v", replacement: "b", regex: /v/gi },
+
+  // =====================
+  //  8. 普通元音增强（最后执行）
+  // =====================
+
+  { original: "i", replacement: "ee", regex: /i/gi },
+  { original: "u", replacement: "oo", regex: /u/gi },
+];
+
+const italian = [
+  // =====================
+  // 0. 重音模拟
+  // =====================
+  { original: "à", replacement: "aa", regex: /à/gi },
+  { original: "è", replacement: "ee", regex: /è/gi },
+  { original: "é", replacement: "ee", regex: /é/gi },
+  { original: "ì", replacement: "ii", regex: /ì/gi },
+  { original: "ò", replacement: "oo", regex: /ò/gi },
+  { original: "ó", replacement: "oo", regex: /ó/gi },
+  { original: "ù", replacement: "uu", regex: /ù/gi },
+
+  // =====================
+  // 1. 双辅音 / 强音
+  // =====================
+  { original: "rr", replacement: "rrr", regex: /rr/gi }, // 强颤音
+  { original: "ll", replacement: "l", regex: /ll/gi }, // 软 l，单 l 发音即可
+  { original: "ss", replacement: "ss", regex: /ss/gi }, // 保留 ss 清音
+  { original: "tt", replacement: "tt", regex: /tt/gi },
+  { original: "cc(?=[eéií])", replacement: "ch", regex: /cc(?=[eéií])/gi }, // ce/ci → ch
+  { original: "gg(?=[eéií])", replacement: "j", regex: /gg(?=[eéií])/gi }, // ge/gi → j
+
+  // =====================
+  // 2. C/G 系列
+  // =====================
+  { original: "c(?=[eéií])", replacement: "ch", regex: /c(?=[eéií])/gi }, // c + e/i → ch
+  { original: "c(?=[aouáóú])", replacement: "k", regex: /c(?=[aouáóú])/gi },
+  { original: "g(?=[eéií])", replacement: "j", regex: /g(?=[eéií])/gi }, // g + e/i → j
+  { original: "g(?=[aouáóú])", replacement: "g", regex: /g(?=[aouáóú])/gi },
+
+  // =====================
+  // 3. GU/GQ 系列
+  // =====================
+  { original: "gu(?=[eéií])", replacement: "g", regex: /gu(?=[eéií])/gi }, // gue/gui → g
+  { original: "qu(?=[eéií])", replacement: "k", regex: /qu(?=[eéií])/gi },
+
+  // =====================
+  // 4. 词尾规则（r/l/n/m/s）
+  // =====================
+  {
+    original: "r(?=$|[s.,!?;:])",
+    replacement: "rr",
+    regex: /r(?=$|[\s.,!?;:])/gi,
+  }, // r 末尾颤音
+  {
+    original: "l(?=$|[s.,!?;:])",
+    replacement: "l",
+    regex: /l(?=$|[\s.,!?;:])/gi,
+  },
+  {
+    original: "n(?=$|[s.,!?;:])",
+    replacement: "n",
+    regex: /n(?=$|[\s.,!?;:])/gi,
+  },
+  {
+    original: "m(?=$|[s.,!?;:])",
+    replacement: "m",
+    regex: /m(?=$|[\s.,!?;:])/gi,
+  },
+  {
+    original: "s(?=$|[s.,!?;:])",
+    replacement: "ss",
+    regex: /s(?=$|[\s.,!?;:])/gi,
+  },
+
+  // =====================
+  // 5. 元音长度增强
+  // =====================
+  { original: "i", replacement: "ii", regex: /i/gi },
+  { original: "u", replacement: "uu", regex: /u/gi },
+  { original: "e", replacement: "ee", regex: /e/gi },
+  { original: "o", replacement: "oo", regex: /o/gi },
+  { original: "a", replacement: "aa", regex: /a/gi },
+
+  // =====================
+  // 6. Y 系列（外来词）
+  // =====================
+  {
+    original: "y(?=$|[s.,!?;:])",
+    replacement: "i",
+    regex: /y(?=$|[\s.,!?;:])/gi,
+  },
+  {
+    original: "y(?=[aeiouáéíóú])",
+    replacement: "j",
+    regex: /y(?=[aeiouáéíóú])/gi,
+  },
+];
+
+const french = [
+  // =====================
+  // 0. 重音元音
+  // =====================
+  { original: "é", replacement: "ee", regex: /é/gi },
+  { original: "è", replacement: "eh", regex: /è/gi },
+  { original: "ê", replacement: "ee", regex: /ê/gi },
+  { original: "à", replacement: "aa", regex: /à/gi },
+  { original: "ù", replacement: "uu", regex: /ù/gi },
+  { original: "ô", replacement: "oo", regex: /ô/gi },
+  { original: "û", replacement: "uu", regex: /û/gi },
+  { original: "ï", replacement: "ii", regex: /ï/gi },
+  { original: "œ", replacement: "oe", regex: /œ/gi },
+  { original: "æ", replacement: "ae", regex: /æ/gi },
+
+  // =====================
+  // 1. 特殊字母
+  // =====================
+  { original: "ç", replacement: "s", regex: /ç/gi },
+
+  // =====================
+  // 2. 字母组合
+  // =====================
+  { original: "gn", replacement: "ny", regex: /gn/gi }, // /ɲ/
+  { original: "ill(?=[aeiouy])", replacement: "y", regex: /ill(?=[aeiouy])/gi }, // famille → famiye
+  { original: "ou", replacement: "oo", regex: /ou/gi },
+  { original: "eu", replacement: "ø", regex: /eu/gi },
+  { original: "au", replacement: "o", regex: /au/gi },
+  { original: "eau", replacement: "o", regex: /eau/gi },
+
+  // =====================
+  // 3. R/L/N 词尾
+  // =====================
+  {
+    original: "r(?=$|[s.,!?;:])",
+    replacement: "rrr",
+    regex: /r(?=$|[\s.,!?;:])/gi,
+  }, // 法语末 r 一般发喉音
+  {
+    original: "l(?=$|[s.,!?;:])",
+    replacement: "l",
+    regex: /l(?=$|[\s.,!?;:])/gi,
+  },
+  {
+    original: "n(?=$|[s.,!?;:])",
+    replacement: "n",
+    regex: /n(?=$|[\s.,!?;:])/gi,
+  },
+  {
+    original: "m(?=$|[s.,!?;:])",
+    replacement: "m",
+    regex: /m(?=$|[\s.,!?;:])/gi,
+  },
+  {
+    original: "s(?=$|[s.,!?;:])",
+    replacement: "ss",
+    regex: /s(?=$|[\s.,!?;:])/gi,
+  },
+
+  // =====================
+  // 4. 元音长度增强
+  // =====================
+  { original: "a", replacement: "aa", regex: /a/gi },
+  { original: "e", replacement: "ee", regex: /e/gi },
+  { original: "i", replacement: "ii", regex: /i/gi },
+  { original: "o", replacement: "oo", regex: /o/gi },
+  { original: "u", replacement: "uu", regex: /u/gi },
+
+  // =====================
+  // 5. Y 系列（外来词）
+  // =====================
+  {
+    original: "y(?=$|[s.,!?;:])",
+    replacement: "i",
+    regex: /y(?=$|[\s.,!?;:])/gi,
+  },
+  {
+    original: "y(?=[aeiouáéíóú])",
+    replacement: "j",
+    regex: /y(?=[aeiouáéíóú])/gi,
+  },
+];
+
+const portuguese = [
+  // =====================
+  // 0. 重音模拟
+  // =====================
+  { original: "á", replacement: "aa", regex: /á/gi },
+  { original: "é", replacement: "ee", regex: /é/gi },
+  { original: "í", replacement: "ii", regex: /í/gi },
+  { original: "ó", replacement: "oo", regex: /ó/gi },
+  { original: "ú", replacement: "uu", regex: /ú/gi },
+  { original: "â", replacement: "aa", regex: /â/gi },
+  { original: "ê", replacement: "ee", regex: /ê/gi },
+  { original: "ô", replacement: "oo", regex: /ô/gi },
+
+  // =====================
+  // 1. 特殊字母
+  // =====================
+  { original: "ç", replacement: "s", regex: /ç/gi },
+  { original: "ã", replacement: "an", regex: /ã/gi },
+  { original: "õ", replacement: "on", regex: /õ/gi },
+  { original: "ñ", replacement: "ny", regex: /ñ/gi }, // 如果有西班牙语混入
+
+  // =====================
+  // 2. 双辅音 / 强音
+  // =====================
+  { original: "rr", replacement: "rrr", regex: /rr/gi }, // 强颤音
+  { original: "ss", replacement: "ss", regex: /ss/gi }, // 保留 ss 清音
+  { original: "lh", replacement: "lj", regex: /lh/gi }, // 葡语 /ʎ/ 类似 lj
+  { original: "nh", replacement: "ny", regex: /nh/gi }, // 葡语 /ɲ/
+
+  // =====================
+  // 3. C/G 系列
+  // =====================
+  { original: "ce", replacement: "se", regex: /ce/gi },
+  { original: "ci", replacement: "si", regex: /ci/gi },
+  { original: "ç", replacement: "s", regex: /ç/gi },
+  { original: "ch", replacement: "sh", regex: /ch/gi }, // 类似英语 sh
+  { original: "g(?=[eéií])", replacement: "j", regex: /g(?=[eéií])/gi }, // ge/gi → j
+  { original: "gu(?=[eéií])", replacement: "g", regex: /gu(?=[eéií])/gi }, // gue/gui → g 不发 u
+  { original: "qu(?=[eéií])", replacement: "k", regex: /qu(?=[eéií])/gi }, // que/qui → k
+  { original: "c(?=[aouáóú])", replacement: "k", regex: /c(?=[aouáóú])/gi },
+
+  // =====================
+  // 4. R/L/N 词尾规则
+  // =====================
+  // r/l/n 词尾 → 发音延长
+  {
+    original: "r(?=$|[s.,!?;:])",
+    replacement: "rr",
+    regex: /r(?=$|[\s.,!?;:])/gi,
+  },
+  {
+    original: "l(?=$|[s.,!?;:])",
+    replacement: "u",
+    regex: /l(?=$|[\s.,!?;:])/gi,
+  }, // 葡语末尾 l 发音近似 u
+  {
+    original: "n(?=$|[s.,!?;:])",
+    replacement: "n",
+    regex: /n(?=$|[\s.,!?;:])/gi,
+  },
+
+  // =====================
+  // 5. 元音长度
+  // =====================
+  { original: "i", replacement: "ee", regex: /i/gi },
+  { original: "u", replacement: "oo", regex: /u/gi },
+
+  // =====================
+  // 6. Y 系列（如果西语/外来词混入）
+  // =====================
+  {
+    original: "y(?=$|[s.,!?;:])",
+    replacement: "i",
+    regex: /y(?=$|[\s.,!?;:])/gi,
+  },
+  {
+    original: "y(?=[aeiouáéíóú])",
+    replacement: "j",
+    regex: /y(?=[aeiouáéíóú])/gi,
+  },
+];
+
 export const speakFixMap = {
-  spanish: [
-    { original: "ll", replacement: "yi", regex: /ll/gi },
-    { original: "rr", replacement: "r", regex: /rr/gi },
-    { original: "qu", replacement: "k", regex: /qu/gi },
-    { original: "ñ", replacement: "ny", regex: /ñ/gi },
-    { original: "ce", replacement: "se", regex: /ce/gi },
-    { original: "ci", replacement: "si", regex: /ci/gi },
-    { original: "gy", replacement: "hy", regex: /gy(?=[aeiou])/gi },
-    { original: "c", replacement: "k", regex: /c(?![ei])/gi },
-    { original: "g", replacement: "h", regex: /g(?=[ei])/gi },
-    { original: "v", replacement: "b", regex: /v/gi },
-    { original: "z", replacement: "s", regex: /z/gi },
-    { original: "í", replacement: "e", regex: /í/gi },
-    { original: "j", replacement: "h", regex: /j(?=[aeiou])/gi },
-  ],
-
-  french: [
-    { original: "ch", replacement: "sh", regex: /ch/gi },
-    { original: "ph", replacement: "f", regex: /ph/gi },
-    { original: "gn", replacement: "ny", regex: /gn/gi },
-    { original: "oi", replacement: "wa", regex: /oi/gi },
-    { original: "ou", replacement: "u", regex: /ou/gi },
-    { original: "au", replacement: "o", regex: /au/gi },
-    { original: "oe", replacement: "e", regex: /oe/gi },
-    { original: "eu", replacement: "ö", regex: /eu/gi },
-    { original: "qu", replacement: "k", regex: /qu/gi },
-    { original: "ç", replacement: "s", regex: /ç/gi },
-    { original: "é", replacement: "e", regex: /é/g },
-    { original: "è", replacement: "e", regex: /è/g },
-    { original: "ê", replacement: "e", regex: /ê/g },
-    { original: "î", replacement: "i", regex: /î/g },
-    { original: "ô", replacement: "o", regex: /ô/g },
-    { original: "û", replacement: "u", regex: /û/g },
-  ],
-
-  italian: [
-    { original: "sci", replacement: "shi", regex: /sci/gi },
-    { original: "sce", replacement: "she", regex: /sce/gi },
-    { original: "gli", replacement: "li", regex: /gli/gi },
-    { original: "ch", replacement: "k", regex: /ch/gi },
-    { original: "gh", replacement: "g", regex: /gh/gi },
-    { original: "gn", replacement: "ny", regex: /gn/gi },
-    { original: "qu", replacement: "kw", regex: /qu/gi },
-    { original: "zz", replacement: "ts", regex: /zz/gi },
-    { original: "ce", replacement: "che", regex: /ce/gi },
-    { original: "ci", replacement: "chi", regex: /ci/gi },
-    { original: "ge", replacement: "je", regex: /ge/gi },
-    { original: "gi", replacement: "ji", regex: /gi/gi },
-    { original: "z", replacement: "ts", regex: /z/gi },
-    { original: "h", replacement: "", regex: /h/gi },
-  ],
-
-  portuguese: [
-    { original: "nh", replacement: "ny", regex: /nh/gi },
-    { original: "lh", replacement: "li", regex: /lh/gi },
-    { original: "ch", replacement: "sh", regex: /ch/gi },
-    { original: "qu", replacement: "ku", regex: /qu/gi },
-    { original: "rr", replacement: "r", regex: /rr/gi },
-    { original: "ce", replacement: "se", regex: /ce/gi },
-    { original: "ci", replacement: "si", regex: /ci/gi },
-    { original: "ge", replacement: "je", regex: /ge/gi },
-    { original: "gi", replacement: "ji", regex: /gi/gi },
-    { original: "gu", replacement: "g", regex: /gu(?=[ei])/gi },
-    { original: "c", replacement: "k", regex: /c(?![ei])/gi },
-    { original: "z", replacement: "s", regex: /z/gi },
-    { original: "v", replacement: "b", regex: /v/gi },
-
-    // 词首 / 句首 / 标点后 r → h
-    {
-      original: "r",
-      replacement: "h",
-      regex: /(?<=^|\s)r/gi,
-    },
-  ],
+  spanish,
+  french,
+  italian,
+  portuguese,
 };

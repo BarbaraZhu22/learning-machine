@@ -271,6 +271,8 @@ const spanish = [
   // =====================
   // 特殊上下文 uch → uthi
   { original: "uch(?=[oa])", replacement: "utchi", regex: /uch(?=[oa])/gi },
+  { original: "ra", replacement: "raa", regex: /ra/gi },
+
   // ce / ci → se / si
   { original: "ce/ci", replacement: "s", regex: /c(?=[eéií])/gi },
 

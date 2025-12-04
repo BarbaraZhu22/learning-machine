@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { AIChatDialog } from "@/app/layout/AIChatDialog/AIChatDialog";
 import { Notice } from "@/components/common";
 import { CounterCard } from "@/components/common/CounterCard";
+import { VocabularyNetwork3D } from "@/components/network/VocabularyNetwork3D";
 import { useTranslation } from "@/hooks/useTranslation";
 import { selectLearningLanguageLabel, useAppStore } from "@/store/useAppStore";
 import { indexedDbClient } from "@/lib/indexedDb";
@@ -218,6 +219,9 @@ export default function ExtensionPage() {
               scale={0.7}
             />
           )}
+        </div>
+        <div className="relative h-[600px] w-full overflow-hidden rounded-md border border-surface-200 bg-surface-50 dark:border-surface-700 dark:bg-surface-950">
+          <VocabularyNetwork3D />
         </div>
       </section>
 

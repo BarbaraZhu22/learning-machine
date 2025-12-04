@@ -3,80 +3,92 @@
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 
-// Custom shader material for star nodes with emissive glow
+// Custom shader material for transparent bubbles with red-yellow-blue gradient
 export function StarMaterial({
   emissiveIntensity = 0.6,
-  opacity = 0.85,
   highlightIntensity = 0.0,
 }: {
   emissiveIntensity?: number;
-  opacity?: number;
   highlightIntensity?: number;
 }) {
-  const materialRef = useRef<THREE.MeshStandardMaterial>(null);
+  const materialRef = useRef<THREE.ShaderMaterial>(null);
+
+  const uniforms = useMemo(
+    () => ({
+      uEmissiveIntensity: { value: emissiveIntensity },
+      uHighlightIntensity: { value: highlightIntensity },
+    }),
+    [emissiveIntensity, highlightIntensity]
+  );
 
   useEffect(() => {
-    if (!materialRef.current) return;
-    const material = materialRef.current;
-
-    // Use onBeforeCompile to inject custom glow effect
-    material.onBeforeCompile = (shader: THREE.Shader) => {
-      // Add custom uniforms
-      shader.uniforms.uEmissiveIntensity = { value: emissiveIntensity };
-      shader.uniforms.uOpacity = { value: opacity };
-      shader.uniforms.uHighlightIntensity = { value: highlightIntensity };
-
-      // Inject custom fragment code before output
-      const customFragment = `
-        // Star glow effect
-        vec3 viewDirection = normalize(cameraPosition - vWorldPosition);
-        vec3 worldNormal = normalize(vNormal);
-        float fresnel = pow(1.0 - dot(viewDirection, worldNormal), 2.0);
-        
-        // Enhanced emissive with fresnel glow
-        vec3 emissiveGlow = (emissive + vColor) * uEmissiveIntensity * (1.0 + fresnel * 2.0);
-        emissiveGlow += vColor * uHighlightIntensity;
-        
-        totalEmissiveRadiance += emissiveGlow;
-      `;
-
-      // Find where to inject our code (before output_fragment)
-      shader.fragmentShader = shader.fragmentShader.replace(
-        "#include <output_fragment>",
-        customFragment + "\n#include <output_fragment>"
-      );
-
-      // Modify opacity
-      shader.fragmentShader = shader.fragmentShader.replace(
-        /gl_FragColor = vec4\(([^)]+)\);/g,
-        "gl_FragColor = vec4($1) * uOpacity;"
-      );
-    };
-
-    return () => {
-      if (material) {
-        material.onBeforeCompile = null;
-      }
-    };
-  }, [emissiveIntensity, opacity, highlightIntensity]);
-
-  // Update uniforms when values change
-  useEffect(() => {
-    if (!materialRef.current || !materialRef.current.userData.shader) return;
-    const shader = materialRef.current.userData.shader;
-    if (shader.uniforms) {
-      shader.uniforms.uEmissiveIntensity.value = emissiveIntensity;
-      shader.uniforms.uOpacity.value = opacity;
-      shader.uniforms.uHighlightIntensity.value = highlightIntensity;
+    if (materialRef.current) {
+      materialRef.current.uniforms.uEmissiveIntensity.value = emissiveIntensity;
+      materialRef.current.uniforms.uHighlightIntensity.value = highlightIntensity;
     }
-  }, [emissiveIntensity, opacity, highlightIntensity]);
+  }, [emissiveIntensity, highlightIntensity]);
+
+  const vertexShader = `
+    attribute float instanceOpacity;
+    
+    varying float vOpacity;
+    varying vec3 vWorldPosition;
+    varying vec3 vNormal;
+    
+    void main() {
+      vOpacity = instanceOpacity;
+      vNormal = normalize(normalMatrix * normal);
+      vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
+      
+      gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+    }
+  `;
+
+  const fragmentShader = `
+    uniform float uEmissiveIntensity;
+    uniform float uHighlightIntensity;
+    
+    varying float vOpacity;
+    varying vec3 vWorldPosition;
+    varying vec3 vNormal;
+    
+    void main() {
+      // Red to Yellow to Blue gradient based on normal
+      vec3 gradientDir = normalize(vec3(1.0, 1.0, 1.0));
+      float gradientFactor = dot(normalize(vNormal), gradientDir) * 0.5 + 0.5;
+      
+      vec3 red = vec3(1.0, 0.2, 0.2);
+      vec3 yellow = vec3(1.0, 0.95, 0.3);
+      vec3 blue = vec3(0.3, 0.5, 1.0);
+      
+      vec3 gradientColor;
+      if (gradientFactor < 0.5) {
+        gradientColor = mix(red, yellow, gradientFactor * 2.0);
+      } else {
+        gradientColor = mix(yellow, blue, (gradientFactor - 0.5) * 2.0);
+      }
+      
+      // Fresnel glow
+      vec3 viewDir = normalize(cameraPosition - vWorldPosition);
+      float fresnel = pow(1.0 - dot(viewDir, normalize(vNormal)), 2.0);
+      vec3 glow = gradientColor * uEmissiveIntensity * (1.0 + fresnel * 2.0);
+      glow += gradientColor * uHighlightIntensity;
+      
+      vec3 finalColor = gradientColor + glow;
+      float finalOpacity = vOpacity;
+      
+      gl_FragColor = vec4(finalColor, finalOpacity);
+    }
+  `;
 
   return (
-    <meshStandardMaterial
+    <shaderMaterial
       ref={materialRef}
-      emissiveIntensity={emissiveIntensity}
-      opacity={opacity}
+      vertexShader={vertexShader}
+      fragmentShader={fragmentShader}
+      uniforms={uniforms}
       transparent={true}
+      side={THREE.DoubleSide}
     />
   );
 }

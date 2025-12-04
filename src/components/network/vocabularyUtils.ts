@@ -1,11 +1,7 @@
 import * as THREE from "three";
 
-// Base size for nodes (minimum size)
-const BASE_NODE_SIZE = 0.5;
-// Size multiplier per link
-const SIZE_PER_LINK = 0.1;
-// Maximum node size
-const MAX_NODE_SIZE = 3.0;
+// Base scale for nodes
+const BASE_SCALE = 0.6;
 
 export interface Node {
   id: string;
@@ -24,19 +20,19 @@ export interface Link {
   relationship: string;
 }
 
-// Calculate node size based on link count
-export function calculateNodeSize(linkCount: number): number {
-  return Math.min(BASE_NODE_SIZE + linkCount * SIZE_PER_LINK, MAX_NODE_SIZE);
+// Calculate node size based on link count proportion
+// Formula: (linkCount / maxLinkCount + 1) * baseScale
+export function calculateNodeSize(
+  linkCount: number,
+  maxLinkCount: number
+): number {
+  if (maxLinkCount === 0) {
+    return BASE_SCALE;
+  }
+  const proportion = linkCount / maxLinkCount;
+  return (proportion + 1) * BASE_SCALE;
 }
 
-// Get node color based on link count
-export function getNodeColor(linkCount: number): string {
-  if (linkCount === 0) return "#888888";
-  if (linkCount < 3) return "#4a90e2";
-  if (linkCount < 5) return "#7b68ee";
-  if (linkCount < 8) return "#9370db";
-  return "#ff6b6b";
-}
 
 // Simple force-directed layout algorithm
 export function computeLayout(
@@ -139,4 +135,3 @@ export function computeLayout(
     }
   }
 }
-

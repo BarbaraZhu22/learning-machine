@@ -220,8 +220,19 @@ export default function ExtensionPage() {
             />
           )}
         </div>
-        <div className="relative h-[600px] w-full overflow-hidden rounded-md border border-surface-200 bg-surface-50 dark:border-surface-700 dark:bg-surface-950">
-          <VocabularyNetwork3D />
+        <div 
+          className="relative h-[600px] w-full overflow-hidden rounded-md border border-surface-200/50 shadow-lg shadow-primary-100/40 dark:border-surface-700/50"
+          style={{
+            backgroundImage: 'url(/images/bg-network.jpg)',
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat',
+          }}
+        >
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-xs"></div>
+          <div className="relative h-full w-full">
+            <VocabularyNetwork3D />
+          </div>
         </div>
       </section>
 

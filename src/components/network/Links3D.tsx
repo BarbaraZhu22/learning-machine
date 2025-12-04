@@ -40,14 +40,17 @@ export function Links3D({ nodes, links }: Links3DProps) {
       positionArray[baseIndex + 4] = end.position.y;
       positionArray[baseIndex + 5] = end.position.z;
 
-      // Color
-      const color = new THREE.Color(0x666666);
-      colorArray[baseIndex] = color.r;
-      colorArray[baseIndex + 1] = color.g;
-      colorArray[baseIndex + 2] = color.b;
-      colorArray[baseIndex + 3] = color.r;
-      colorArray[baseIndex + 4] = color.g;
-      colorArray[baseIndex + 5] = color.b;
+      // Red to Blue gradient along the line
+      const startColor = new THREE.Color(1.0, 0.2, 0.2); // Red
+      const endColor = new THREE.Color(0.3, 0.5, 1.0); // Blue
+      
+      colorArray[baseIndex] = startColor.r;
+      colorArray[baseIndex + 1] = startColor.g;
+      colorArray[baseIndex + 2] = startColor.b;
+      
+      colorArray[baseIndex + 3] = endColor.r;
+      colorArray[baseIndex + 4] = endColor.g;
+      colorArray[baseIndex + 5] = endColor.b;
     }
 
     return { positions: positionArray, colors: colorArray };
@@ -71,8 +74,12 @@ export function Links3D({ nodes, links }: Links3DProps) {
           itemSize={3}
         />
       </bufferGeometry>
-      <lineBasicMaterial vertexColors linewidth={1} />
+      <lineBasicMaterial 
+        vertexColors 
+        linewidth={1} 
+        transparent 
+        opacity={0.5}
+      />
     </lineSegments>
   );
 }
-

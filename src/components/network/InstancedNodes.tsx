@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { StarMaterial } from "./StarMaterial";
-import { Node, getNodeColor } from "./vocabularyUtils";
+import { Node } from "./vocabularyUtils";
 
 interface InstancedNodesProps {
   nodes: Node[];
@@ -11,39 +11,50 @@ interface InstancedNodesProps {
   onNodeClick: (nodeId: string) => void;
 }
 
+const DEFAULT_OPACITY = 0.2; // Transparent bubble effect
+
 export function InstancedNodes({
   nodes,
   selectedNodeId,
   onNodeClick,
 }: InstancedNodesProps) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
+  const geometryRef = useRef<THREE.BufferGeometry>(null);
   const tempObject = useMemo(() => new THREE.Object3D(), []);
+
+  // Create opacity attribute for transparent bubbles
+  useEffect(() => {
+    if (!geometryRef.current) return;
+
+    const opacityArray = new Float32Array(nodes.length);
+
+    for (let i = 0; i < nodes.length; i++) {
+      const node = nodes[i];
+      const isSelected = selectedNodeId === node.id;
+      
+      opacityArray[i] = isSelected ? 1.0 : DEFAULT_OPACITY;
+    }
+
+    const opacityAttribute = new THREE.InstancedBufferAttribute(opacityArray, 1);
+    geometryRef.current.setAttribute("instanceOpacity", opacityAttribute);
+    opacityAttribute.needsUpdate = true;
+  }, [nodes, selectedNodeId]);
 
   useEffect(() => {
     if (!meshRef.current) return;
 
     for (let i = 0; i < nodes.length; i++) {
       const node = nodes[i];
-      const isSelected = selectedNodeId === node.id;
 
       tempObject.position.copy(node.position);
       tempObject.scale.setScalar(node.size);
       tempObject.updateMatrix();
 
       meshRef.current!.setMatrixAt(i, tempObject.matrix);
-
-      // Set color - gold for selected, normal color for others
-      const color = isSelected
-        ? new THREE.Color(0xffd700)
-        : new THREE.Color(getNodeColor(node.linkCount));
-      meshRef.current!.setColorAt(i, color);
     }
 
     meshRef.current.instanceMatrix.needsUpdate = true;
-    if (meshRef.current.instanceColor) {
-      meshRef.current.instanceColor.needsUpdate = true;
-    }
-  }, [nodes, selectedNodeId, tempObject]);
+  }, [nodes, tempObject]);
 
   const handleClick = (event: any) => {
     if (!meshRef.current) return;
@@ -74,13 +85,14 @@ export function InstancedNodes({
         document.body.style.cursor = "default";
       }}
     >
-      <sphereGeometry args={[1, 16, 16]} />
+      <sphereGeometry
+        ref={geometryRef}
+        args={[1, 16, 16]}
+      />
       <StarMaterial
         emissiveIntensity={0.6}
-        opacity={0.85}
         highlightIntensity={highlightIntensity}
       />
     </instancedMesh>
   );
 }
-

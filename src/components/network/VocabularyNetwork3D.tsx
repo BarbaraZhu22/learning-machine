@@ -143,11 +143,21 @@ export const VocabularyNetwork3D = () => {
       linkCounts.set(link.end, (linkCounts.get(link.end) || 0) + 1);
     }
 
+    // Find max link count for proportion calculation
+    let maxLinkCount = 0;
+    for (let i = 0; i < vocabularyGraph.nodes.length; i++) {
+      const linkCount = linkCounts.get(vocabularyGraph.nodes[i].word) || 0;
+      if (linkCount > maxLinkCount) {
+        maxLinkCount = linkCount;
+      }
+    }
+
     // Create nodes
     const nodes: Node[] = [];
     for (let i = 0; i < vocabularyGraph.nodes.length; i++) {
       const nodeData = vocabularyGraph.nodes[i];
       const linkCount = linkCounts.get(nodeData.word) || 0;
+      
       nodes.push({
         id: nodeData.word,
         word: nodeData.word,
@@ -155,7 +165,7 @@ export const VocabularyNetwork3D = () => {
         phonetic: nodeData.phonetic,
         tags: nodeData.tags,
         position: new THREE.Vector3(),
-        size: calculateNodeSize(linkCount),
+        size: calculateNodeSize(linkCount, maxLinkCount),
         linkCount,
       });
     }
@@ -219,6 +229,8 @@ export const VocabularyNetwork3D = () => {
             dampingFactor={0.05}
             minDistance={10}
             maxDistance={50}
+            autoRotate
+            autoRotateSpeed={0.7}
           />
         </Canvas>
       </div>
@@ -242,6 +254,7 @@ export const VocabularyNetwork3D = () => {
                 color: selectedNodeId === node.id ? "#ffd700" : "#ffffff",
                 textShadow:
                   "1px 1px 2px rgba(0,0,0,0.8), -1px -1px 2px rgba(0,0,0,0.8)",
+                userSelect: "none",
               }}
               onClick={() => setSelectedNodeId(node.id)}
             >

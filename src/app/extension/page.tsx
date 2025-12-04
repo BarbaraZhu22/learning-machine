@@ -102,6 +102,7 @@ export default function ExtensionPage() {
   const [showNotice, setShowNotice] = useState(false);
   const [completedState, setCompletedState] = useState<FlowState | null>(null);
   const [vocabularyCount, setVocabularyCount] = useState(0);
+  const [learnedCount, setLearnedCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const loadVocabularyCount = useCallback(async () => {
@@ -109,9 +110,11 @@ export default function ExtensionPage() {
       setLoading(true);
       const graph = await indexedDbClient.getVocabulary(learningLanguage);
       setVocabularyCount(graph?.nodes?.length || 0);
+      setLearnedCount(graph?.learnedNodes?.length || 0);
     } catch (error) {
       console.error("Failed to load vocabulary count:", error);
       setVocabularyCount(0);
+      setLearnedCount(0);
     } finally {
       setLoading(false);
     }
@@ -119,6 +122,20 @@ export default function ExtensionPage() {
 
   useEffect(() => {
     loadVocabularyCount();
+
+    // Listen for vocabulary learned changes
+    const handleLearnedChange = () => {
+      loadVocabularyCount();
+    };
+
+    window.addEventListener("vocabulary-learned-changed", handleLearnedChange);
+
+    return () => {
+      window.removeEventListener(
+        "vocabulary-learned-changed",
+        handleLearnedChange
+      );
+    };
   }, [loadVocabularyCount]);
 
   const handleWorkflowComplete = async (data: {
@@ -144,7 +161,9 @@ export default function ExtensionPage() {
     const vocabData = extractVocabularyData(completedState);
     if (vocabData && vocabData.nodes.length > 0) {
       try {
-        const existingGraph = await indexedDbClient.getVocabulary(learningLanguage);
+        const existingGraph = await indexedDbClient.getVocabulary(
+          learningLanguage
+        );
         const existingWords = new Set(
           (existingGraph?.nodes || []).map((n) => n.word.toLowerCase())
         );
@@ -154,13 +173,18 @@ export default function ExtensionPage() {
         const mergedNodes = [...(existingGraph?.nodes || []), ...newNodes];
         const existingLinks = new Set(
           (existingGraph?.links || []).map(
-            (l) => `${l.start.toLowerCase()}-${l.end.toLowerCase()}-${l.relationship}`
+            (l) =>
+              `${l.start.toLowerCase()}-${l.end.toLowerCase()}-${
+                l.relationship
+              }`
           )
         );
         const newLinks = vocabData.links.filter(
           (link) =>
             !existingLinks.has(
-              `${link.start.toLowerCase()}-${link.end.toLowerCase()}-${link.relationship}`
+              `${link.start.toLowerCase()}-${link.end.toLowerCase()}-${
+                link.relationship
+              }`
             )
         );
         const mergedLinks = [...(existingGraph?.links || []), ...newLinks];
@@ -209,24 +233,35 @@ export default function ExtensionPage() {
             {t("vocabularyGame") || "VocabularyGame"}
           </h1>
           {loading ? (
-            <div className="text-sm text-muted-foreground">{t("loading") || "Loading..."}</div>
+            <div className="text-sm text-muted-foreground">
+              {t("loading") || "Loading..."}
+            </div>
           ) : (
-            <CounterCard
-              count={vocabularyCount}
-              label={t("vocabulary") || "Vocabulary"}
-              onClick={() => {}}
-              className="cursor-default hover:scale-100"
-              scale={0.7}
-            />
+            <div className="flex gap-1 items-center">
+              <CounterCard
+                count={learnedCount}
+                label={t("learnedWords") || "Learned"}
+                onClick={() => {}}
+                className="cursor-default hover:scale-100"
+                scale={0.7}
+              />
+              <CounterCard
+                count={vocabularyCount}
+                label={t("vocabulary") || "Vocabulary"}
+                onClick={() => {}}
+                className="cursor-default hover:scale-100"
+                scale={0.7}
+              />
+            </div>
           )}
         </div>
-        <div 
+        <div
           className="relative h-[600px] w-full overflow-hidden rounded-md border border-surface-200/50 shadow-lg shadow-primary-100/40 dark:border-surface-700/50"
           style={{
-            backgroundImage: 'url(/images/bg-network.jpg)',
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            backgroundRepeat: 'no-repeat',
+            backgroundImage: "url(/images/bg-network.jpg)",
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+            backgroundRepeat: "no-repeat",
           }}
         >
           <div className="absolute inset-0 bg-black/50 backdrop-blur-xs"></div>

@@ -16,6 +16,7 @@ export interface VocabularyGraph {
     end: string;
     relationship: string;
   }>;
+  learnedNodes?: string[]; // Array of learned word text values
 }
 
 interface LearningMachineDB extends DBSchema {

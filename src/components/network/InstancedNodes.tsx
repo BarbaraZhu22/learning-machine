@@ -9,6 +9,7 @@ interface InstancedNodesProps {
   nodes: Node[];
   selectedNodeId: string | null;
   onNodeClick: (nodeId: string) => void;
+  learnedNodes?: Set<string>;
 }
 
 const DEFAULT_OPACITY = 0.2; // Transparent bubble effect
@@ -17,6 +18,7 @@ export function InstancedNodes({
   nodes,
   selectedNodeId,
   onNodeClick,
+  learnedNodes = new Set(),
 }: InstancedNodesProps) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const geometryRef = useRef<THREE.BufferGeometry>(null);
@@ -31,14 +33,15 @@ export function InstancedNodes({
     for (let i = 0; i < nodes.length; i++) {
       const node = nodes[i];
       const isSelected = selectedNodeId === node.id;
+      const isLearned = learnedNodes.has(node.id);
       
-      opacityArray[i] = isSelected ? 1.0 : DEFAULT_OPACITY;
+      opacityArray[i] = isSelected || isLearned ? 1.0 : DEFAULT_OPACITY;
     }
 
     const opacityAttribute = new THREE.InstancedBufferAttribute(opacityArray, 1);
     geometryRef.current.setAttribute("instanceOpacity", opacityAttribute);
     opacityAttribute.needsUpdate = true;
-  }, [nodes, selectedNodeId]);
+  }, [nodes, selectedNodeId, learnedNodes]);
 
   useEffect(() => {
     if (!meshRef.current) return;

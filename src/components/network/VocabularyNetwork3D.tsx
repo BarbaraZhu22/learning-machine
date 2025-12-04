@@ -9,13 +9,13 @@ import { useAppStore, selectLearningLanguage } from "@/store/useAppStore";
 import { useTranslation } from "@/hooks/useTranslation";
 import { InstancedNodes } from "./InstancedNodes";
 import { Links3D } from "./Links3D";
+import { VocabularyLearningGame } from "./VocabularyLearningGame";
 import {
   Node,
   Link,
   calculateNodeSize,
   computeLayout,
 } from "./vocabularyUtils";
-
 
 // Scene component that provides node positions for labels
 function SceneContent({
@@ -24,6 +24,7 @@ function SceneContent({
   selectedNodeId,
   onNodeClick,
   onNodePositionsUpdate,
+  learnedNodes,
 }: {
   nodes: Node[];
   links: Link[];
@@ -32,6 +33,7 @@ function SceneContent({
   onNodePositionsUpdate: (
     positions: Map<string, { x: number; y: number }>
   ) => void;
+  learnedNodes: Set<string>;
 }) {
   const { camera, size } = useThree();
   const vector = useMemo(() => new THREE.Vector3(), []);
@@ -61,6 +63,7 @@ function SceneContent({
         nodes={nodes}
         selectedNodeId={selectedNodeId}
         onNodeClick={onNodeClick}
+        learnedNodes={learnedNodes}
       />
 
       <Links3D nodes={nodes} links={links} />
@@ -80,12 +83,15 @@ export const VocabularyNetwork3D = () => {
       notes?: string;
     }>;
     links: Link[];
+    learnedNodes?: string[];
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [nodePositions, setNodePositions] = useState<
     Map<string, { x: number; y: number }>
   >(new Map());
+  const [showLearningGame, setShowLearningGame] = useState(false);
+  const [learnedNodes, setLearnedNodes] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const loadVocabulary = async () => {
@@ -96,7 +102,9 @@ export const VocabularyNetwork3D = () => {
           setVocabularyGraph({
             nodes: graph.nodes,
             links: graph.links,
+            learnedNodes: graph.learnedNodes || [],
           });
+          setLearnedNodes(new Set(graph.learnedNodes || []));
         }
       } catch (error) {
         console.error("Failed to load vocabulary:", error);
@@ -107,6 +115,21 @@ export const VocabularyNetwork3D = () => {
 
     loadVocabulary();
   }, [learningLanguage]);
+
+  // Handle space key to deselect node
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === " " && selectedNodeId !== null) {
+        e.preventDefault();
+        setSelectedNodeId(null);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [selectedNodeId]);
 
   const { processedNodes, processedLinks } = useMemo(() => {
     if (!vocabularyGraph || vocabularyGraph.nodes.length === 0) {
@@ -157,7 +180,7 @@ export const VocabularyNetwork3D = () => {
     for (let i = 0; i < vocabularyGraph.nodes.length; i++) {
       const nodeData = vocabularyGraph.nodes[i];
       const linkCount = linkCounts.get(nodeData.word) || 0;
-      
+
       nodes.push({
         id: nodeData.word,
         word: nodeData.word,
@@ -209,6 +232,55 @@ export const VocabularyNetwork3D = () => {
     return null;
   })();
 
+  const isWordLearned = selectedNode
+    ? learnedNodes.has(selectedNode.word)
+    : false;
+
+  const handleNodeClick = (nodeId: string) => {
+    setSelectedNodeId(nodeId);
+    
+    // Find the clicked node
+    const clickedNode = processedNodes.find((n) => n.id === nodeId);
+    if (clickedNode && !learnedNodes.has(clickedNode.word)) {
+      // If node is not learned, open the game directly
+      setShowLearningGame(true);
+    }
+  };
+
+  const handleLearnComplete = async (passed: boolean) => {
+    setShowLearningGame(false);
+
+    if (passed && selectedNode) {
+      try {
+        const graph = await indexedDbClient.getVocabulary(learningLanguage);
+        if (graph) {
+          const updatedLearnedNodes = new Set(graph.learnedNodes || []);
+          updatedLearnedNodes.add(selectedNode.word);
+
+          await indexedDbClient.saveVocabulary({
+            ...graph,
+            learnedNodes: Array.from(updatedLearnedNodes),
+          });
+
+          setLearnedNodes(updatedLearnedNodes);
+          setVocabularyGraph((prev) => ({
+            ...prev!,
+            learnedNodes: Array.from(updatedLearnedNodes),
+          }));
+
+          // Dispatch custom event to notify parent component to refresh learned count
+          window.dispatchEvent(
+            new CustomEvent("vocabulary-learned-changed", {
+              detail: { learnedCount: updatedLearnedNodes.size },
+            })
+          );
+        }
+      } catch (error) {
+        console.error("Failed to save learned node:", error);
+      }
+    }
+  };
+
   return (
     <div className="relative h-full w-full">
       {/* 3D Canvas */}
@@ -221,8 +293,9 @@ export const VocabularyNetwork3D = () => {
             nodes={processedNodes}
             links={processedLinks}
             selectedNodeId={selectedNodeId}
-            onNodeClick={setSelectedNodeId}
+            onNodeClick={handleNodeClick}
             onNodePositionsUpdate={setNodePositions}
+            learnedNodes={learnedNodes}
           />
           <OrbitControls
             enableDamping
@@ -241,6 +314,10 @@ export const VocabularyNetwork3D = () => {
           const pos = nodePositions.get(node.id);
           if (!pos) return null;
 
+          const isSelected = selectedNodeId === node.id;
+          const isLearned = learnedNodes.has(node.id);
+          const shouldBeOpaque = isSelected || isLearned;
+
           return (
             <div
               key={node.id}
@@ -249,14 +326,15 @@ export const VocabularyNetwork3D = () => {
                 left: `${pos.x}px`,
                 top: `${pos.y}px`,
                 transform: "translate(-50%, -50%)",
-                fontSize: selectedNodeId === node.id ? "14px" : "12px",
-                fontWeight: selectedNodeId === node.id ? "bold" : "normal",
-                color: selectedNodeId === node.id ? "#ffd700" : "#ffffff",
+                fontSize: isSelected ? "1em" : "0.7em",
+                fontWeight: isSelected ? "bold" : "normal",
+                color: isSelected ? "#ffd700" : "#ffffff",
+                opacity: shouldBeOpaque ? "1" : "0.3",
                 textShadow:
                   "1px 1px 2px rgba(0,0,0,0.8), -1px -1px 2px rgba(0,0,0,0.8)",
                 userSelect: "none",
               }}
-              onClick={() => setSelectedNodeId(node.id)}
+              onClick={() => handleNodeClick(node.id)}
             >
               {node.word}
             </div>
@@ -291,9 +369,37 @@ export const VocabularyNetwork3D = () => {
             </div>
           )}
           <div className="mt-2 text-xs text-muted-foreground">
-            {selectedNode.linkCount} connections
+            {selectedNode.linkCount} {t("connections")}
           </div>
+          {isWordLearned && (
+            <div className="mt-2 text-xs text-green-600 dark:text-green-400">
+              ✓ {t("learned")}
+            </div>
+          )}
+          {!isWordLearned && (
+            <button
+              onClick={() => setShowLearningGame(true)}
+              className={`mt-3 w-full rounded-md px-3 py-2 text-xs font-medium transition ${
+                isWordLearned
+                  ? "cursor-not-allowed bg-surface-200 text-surface-500 dark:bg-surface-700 dark:text-surface-400"
+                  : "bg-gradient-to-r from-primary-500 to-primary-700 text-[color:var(--text-inverse)] shadow-md hover:brightness-105"
+              }`}
+            >
+              {t("learnVocabulary")}
+            </button>
+          )}
         </div>
+      )}
+
+      {/* Learning Game Dialog */}
+      {showLearningGame && selectedNode && (
+        <VocabularyLearningGame
+          word={selectedNode.word}
+          meaning={selectedNode.meaning}
+          phonetic={selectedNode.phonetic}
+          onComplete={handleLearnComplete}
+          onClose={() => setShowLearningGame(false)}
+        />
       )}
     </div>
   );

@@ -219,3 +219,61 @@ html[data-theme="dark"] .app-card::before {
 .text-muted-foreground {
   color: var(--muted-foreground);
 }
+
+@keyframes scrollWord {
+  0% {
+    left: -100%;
+    opacity: 1;
+  }
+  100% {
+    left: 110%;
+    opacity: 1;
+  }
+}
+
+@keyframes shakeAndExplode {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 1;
+  }
+  10% {
+    transform: translate(-10px, -10px) scale(1.2);
+  }
+  20% {
+    transform: translate(10px, 10px) scale(1.4);
+  }
+  30% {
+    transform: translate(-15px, 15px) scale(1.6);
+  }
+  40% {
+    transform: translate(15px, -15px) scale(1.8);
+  }
+  50% {
+    transform: translate(-20px, 20px) scale(2.2);
+  }
+  60% {
+    transform: translate(20px, -20px) scale(2.6);
+  }
+  70% {
+    transform: translate(-25px, 25px) scale(3);
+  }
+  80% {
+    transform: translate(25px, -25px) scale(3.5);
+  }
+  90% {
+    transform: translate(0, 0) scale(4);
+    opacity: 0.5;
+  }
+  100% {
+    transform: translate(0, 0) scale(5);
+    opacity: 0;
+  }
+}
+
+.word-scroll-animation {
+  animation: scrollWord 2s linear;
+}
+
+.word-pop-animation {
+  animation: shakeAndExplode 0.8s ease-out;
+}

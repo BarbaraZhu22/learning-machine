@@ -107,3 +107,29 @@ export function getDialogValidationInstructions(context?: NodeContext): string {
 4. Dialog must be natural, relevant, and appropriate for language learning`;
 }
 
+/**
+ * Get phonetic format instructions based on learning language
+ */
+export function getPhoneticFormatInstruction(context?: NodeContext): string {
+  const learningLanguage = context?.learningLanguage || 'english';
+
+  const phoneticFormats: Record<string, string> = {
+    english: 'Use IPA (International Phonetic Alphabet) notation, e.g., "/hɛloʊ/"',
+    japanese: 'Use Romaji (romanized form), e.g., "konnichiwa"',
+    chinese: 'Use Pinyin, e.g., "dān cí"',
+    cantonese: 'Use Jyutping, e.g., "daan1 ci4"',
+    korean: 'Use Revised Romanization, e.g., "annyeonghaseyo"',
+    spanish: 'Use IPA notation, e.g., "/hɔla/"',
+    french: 'Use IPA notation, e.g., "/bɔnʒuʁ/"',
+    german: 'Use IPA notation, e.g., "/gʊtən tɑk/"',
+    portuguese: 'Use IPA notation, e.g., "/ɔla/"',
+    italian: 'Use IPA notation, e.g., "/tʃao/"',
+    russian: 'Use IPA notation, e.g., "/privet/"',
+    turkish: 'Use IPA notation, e.g., "/mɛrhaba/"',
+    polish: 'Use IPA notation, e.g., "/tʃɛst/"',
+    dutch: 'Use IPA notation, e.g., "/hɑlo/"',
+  };
+
+  return phoneticFormats[learningLanguage] || 'Use standard phonetic notation appropriate for the language';
+}
+

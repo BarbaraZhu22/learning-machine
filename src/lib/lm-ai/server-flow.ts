@@ -482,7 +482,11 @@ async function* continueFlowExecutionStream(
         result = finalResult;
       } else {
         // Execute non-LLM nodes normally
-        result = await node.execute(currentState.context);
+        // For merge-nodes-links-pre, pass steps array so it can access clean step output
+        const executeContext = step.nodeId === "merge-nodes-links-pre"
+          ? { ...currentState.context, _flowSteps: currentState.steps } as any
+          : currentState.context;
+        result = await node.execute(executeContext);
       }
 
       // Update step result in the flow's state

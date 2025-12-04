@@ -348,6 +348,15 @@ export const AIChatDialog = ({
               content: m.content,
             })),
         }),
+        // For extend-vocabulary flow, include vocabulary cache (filtered by learning language)
+        ...(flowId === "extend-vocabulary" && {
+          vocabularyCache: appState.vocabulary
+            .filter((entry) => entry.learningLanguage === appState.learningLanguage)
+            .map((entry) => ({
+              word: entry.word,
+              meaning: entry.meaning,
+            })),
+        }),
       };
 
       try {

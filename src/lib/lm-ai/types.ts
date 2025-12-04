@@ -8,7 +8,11 @@ export type PreNodeType =
   | 'organize'
   | 'transform-message'
   | 'validate-input'
-  | 'validate-and-transform';
+  | 'validate-and-transform'
+  | 'clean-vocabulary-links'
+  | 'clean-invalid-vocabulary'
+  | 'clean-invalid-vocabulary-nodes'
+  | 'merge-vocabulary-nodes-links';
 
 export type LLMNodeType =
   | 'dialog-analysis'

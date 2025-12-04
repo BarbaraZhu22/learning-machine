@@ -16,6 +16,7 @@ import {
   getUserLanguageContext,
   getDialogFormatInstructions,
   getDialogValidationInstructions,
+  getPhoneticFormatInstruction,
 } from "./language-hints";
 
 /**
@@ -50,9 +51,11 @@ export function createLLMNode(
       // This non-streaming execute is only used in special cases (like controlFlow restart)
       const apiKey = (context as any)._apiKey as string | undefined;
       if (!apiKey && provider !== "custom") {
-        throw new Error("API key required but not provided in context. Use streaming execution path instead.");
+        throw new Error(
+          "API key required but not provided in context. Use streaming execution path instead."
+        );
       }
-      
+
       const response = await callLLMAPI({
         provider,
         apiKey,
@@ -144,17 +147,45 @@ export async function prepareMessages(
       }
     }
 
+    // Handle vocabulary cache
+    let vocabularyCacheStr = "";
+    if (context?.vocabularyCache) {
+      const vocabCache = context.vocabularyCache;
+      if (Array.isArray(vocabCache)) {
+        // Format vocabulary cache as array of words (in learning language)
+        const words = vocabCache.map((entry: any) => {
+          if (typeof entry === "string") return entry;
+          if (entry && typeof entry === "object" && entry.word)
+            return entry.word;
+          return String(entry);
+        });
+        vocabularyCacheStr =
+          words.length > 0
+            ? words.join(", ")
+            : "(empty - no cached vocabulary)";
+      } else if (typeof vocabCache === "object" && vocabCache !== null) {
+        vocabularyCacheStr = JSON.stringify(vocabCache, null, 2);
+      } else {
+        vocabularyCacheStr = String(vocabCache);
+      }
+    } else {
+      vocabularyCacheStr = "(empty - no cached vocabulary)";
+    }
+
     // Replace special instruction variables
     const dialogFormatInstructions = getDialogFormatInstructions(context);
     const validationInstructions = getDialogValidationInstructions(context);
+    const phoneticFormatInstruction = getPhoneticFormatInstruction(context);
 
     let result = template
       .replace(/\{\{input\}\}/g, inputStr)
       .replace(/\{\{previousOutput\}\}/g, previousOutputStr)
       .replace(/\{\{userLanguage\}\}/g, userLanguage)
       .replace(/\{\{learningLanguage\}\}/g, learningLanguage)
+      .replace(/\{\{vocabularyCache\}\}/g, vocabularyCacheStr)
       .replace(/\{\{dialogFormatInstructions\}\}/g, dialogFormatInstructions)
-      .replace(/\{\{validationInstructions\}\}/g, validationInstructions);
+      .replace(/\{\{validationInstructions\}\}/g, validationInstructions)
+      .replace(/\{\{phoneticFormatInstruction\}\}/g, phoneticFormatInstruction);
 
     // Handle extension-specific variables
     if (previousDialogStr) {
@@ -183,7 +214,9 @@ export async function prepareMessages(
   if (systemPrompt) {
     // Automatically prepend language instruction to system prompt
     const languageInstruction = getSystemLanguageInstruction(context);
-    const fullSystemPrompt = `${languageInstruction}\n\n${replaceTemplateVars(systemPrompt)}`;
+    const fullSystemPrompt = `${languageInstruction}\n\n${replaceTemplateVars(
+      systemPrompt
+    )}`;
     messages.push({ role: "system", content: fullSystemPrompt });
   }
 
@@ -200,7 +233,10 @@ export async function prepareMessages(
 
   // When using JSON response format, ensure the prompt contains the word "json"
   // This is required by OpenAI/DeepSeek APIs
-  if (responseFormat === "json" && !userContent.toLowerCase().includes("json")) {
+  if (
+    responseFormat === "json" &&
+    !userContent.toLowerCase().includes("json")
+  ) {
     userContent += "\n\nPlease respond in JSON format.";
   }
 
@@ -269,7 +305,8 @@ async function callLLMAPI(request: LLMAPIRequest): Promise<unknown> {
     };
   } else {
     body = {
-      model: model || (provider === "deepseek" ? "deepseek-chat" : "gpt-3.5-turbo"),
+      model:
+        model || (provider === "deepseek" ? "deepseek-chat" : "gpt-3.5-turbo"),
       messages,
       ...(temperature !== undefined && { temperature }),
       ...(maxTokens !== undefined && { max_tokens: maxTokens }),
@@ -305,17 +342,17 @@ async function callLLMAPI(request: LLMAPIRequest): Promise<unknown> {
     if (apiKey) {
       // Remove API key from error message if it appears
       sanitizedError = sanitizedError.replace(
-        new RegExp(apiKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'),
-        '[API_KEY_HIDDEN]'
+        new RegExp(apiKey.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"),
+        "[API_KEY_HIDDEN]"
       );
       // Also remove common API key patterns
       sanitizedError = sanitizedError.replace(
         /sk-[a-zA-Z0-9]{20,}/g,
-        '[API_KEY_HIDDEN]'
+        "[API_KEY_HIDDEN]"
       );
       sanitizedError = sanitizedError.replace(
         /Bearer\s+sk-[a-zA-Z0-9]{20,}/g,
-        'Bearer [API_KEY_HIDDEN]'
+        "Bearer [API_KEY_HIDDEN]"
       );
     }
     throw new Error(`LLM API error: ${response.status} ${sanitizedError}`);
@@ -330,4 +367,3 @@ async function callLLMAPI(request: LLMAPIRequest): Promise<unknown> {
     return data.choices?.[0]?.message?.content || "";
   }
 }
-

@@ -603,7 +603,9 @@ export function createSimulateDialogFlow(
 
 /**
  * Flow 2: Extend Vocabulary
- * ExtensionAnalysis => ExtensionCheck (if not valid back to ExtensionAnalysis) => ExtensionRelationshipAnalysis => ExtensionRelationshipCheck
+ * Node 1: Analysis - Analyze input, extract vocabulary, output structured format
+ * Node 2: Generate Vocabulary - Generate vocabulary with nodes and links
+ * Node 3: Validation - Validate and fix vocabulary, links, meanings
  */
 export function createExtendVocabularyFlow(
   llmConfig?: {
@@ -619,113 +621,258 @@ export function createExtendVocabularyFlow(
   const builder = new FlowBuilder(
     "extend-vocabulary",
     "Extend Vocabulary"
-  ).setDescription("Analyze and extend vocabulary with relationships");
-
-  // Pre node: Format input
-  const formatInput = createPreNode(
-    "format-vocab-input",
-    "Format Vocabulary Input",
-    {
-      type: "format",
-      format: "structured",
-    }
+  ).setDescription(
+    "Analyze input, generate vocabulary with relationships, and validate"
   );
 
-  // LLM node: Extension Analysis
-  const extensionAnalysis = createLLMNode(
-    "extension-analysis",
-    "Extension Analysis",
+  // Node 1: Vocabulary Analysis
+  // Analyzes input, extracts vocabulary, outputs structured format with vocabulary, topicFocus, vocabularyCount, condition
+  const vocabularyAnalysis = createLLMNode(
+    "vocabulary-analysis",
+    "Vocabulary Analysis",
     {
       type: "extension-analysis",
       provider: llmConfig?.provider || "deepseek",
-      // apiKey is never stored in config - it's passed at execution time from cookies
       apiUrl: llmConfig?.apiUrl,
       model: llmConfig?.model,
       systemPrompt:
-        "You are a language learning assistant. Analyze vocabulary extension requests.",
-      userPromptTemplate:
-        "Analyze this vocabulary extension request: {{input}}\n\nDetermine: vocabulary category (family, work, shopping, daily, etc.), number of words needed, and target language.",
+        "You are a language learning assistant. Analyze vocabulary extension requests and extract vocabulary from input text.",
+      userPromptTemplate: `Analyze the input and find vocabulary in it.
+
+Input: {{input}}
+
+Cached Vocabulary (learning language: {{learningLanguage}}):
+{{vocabularyCache}}
+
+Instructions:
+1. Extract vocabulary words from the input text (in learning language: {{learningLanguage}})
+2. If you cannot find 50 vocabulary items in the input, or if there's no valid input, set vocabulary to an empty array []
+3. Determine topic focus areas from the input
+4. Set default vocabulary count to 50 if not specified
+5. Identify relationship conditions needed: synonyms, antonyms, cognates, fixed collocations, or other relationships (use system language: {{userLanguage}} for these terms)
+6. If no valid input, the topic should be based on extending current vocabulary (avoid repeating cached vocabulary)
+7. New vocabulary must avoid repetition with cached vocabulary (words are case-insensitive)
+
+Output MUST be in JSON format:
+{
+  "vocabulary": ["word1", "word2", ...], // Array of vocabulary words found in input (in learning language), or [] if not enough found
+  "topicFocus": ["topic1", "topic2", ...], // Array of topics/focus areas
+  "coreTopicVocabulary": "核心词", // Core topic vocabulary word (in learning language) - the main theme word, used for linking nodes with "其他关系"
+  "vocabularyCount": 50, // Default 50, number of vocabulary items to generate
+  "condition": ["synonym", "antonym", "cognate", "collocation", "other"] // Array of relationship types needed (in system language: {{userLanguage}})
+}
+
+If no vocabulary found in input, set vocabulary to [] and determine topicFocus based on extending current vocabulary. The coreTopicVocabulary should be the main theme/topic word in learning language.`,
       responseFormat: "json",
+      showResponse: true,
     },
-    "Analyze vocabulary extension requirements"
+    "Analyze input, extract vocabulary, and determine extension parameters"
   );
 
-  // LLM node: Extension Check
-  const extensionCheck = createLLMNode(
-    "extension-check",
-    "Extension Check",
+  // Node 2: Vocabulary Generation 1 - Generate vocabulary nodes only
+  const vocabularyGeneration1 = createLLMNode(
+    "vocabulary-generation-1",
+    "Vocabulary Generation",
+    {
+      type: "extension-analysis",
+      provider: llmConfig?.provider || "deepseek",
+      apiUrl: llmConfig?.apiUrl,
+      model: llmConfig?.model,
+      systemPrompt:
+        "You are a language learning assistant. Generate vocabulary nodes based on analysis parameters.",
+      userPromptTemplate: `Based on the analysis, generate vocabulary nodes only (no links).
+
+Analysis:
+{{input}}
+
+Cached Vocabulary (learning language: {{learningLanguage}}, system language: {{userLanguage}}):
+{{vocabularyCache}}
+
+Instructions:
+1. Generate exactly vocabularyCount vocabulary items based on topicFocus
+2. All words must be in the learning language ({{learningLanguage}}) - original format
+3. All meanings/explanations must be in the system language ({{userLanguage}})
+4. Provide phonetic/pronunciation for each word: {{phoneticFormatInstruction}}
+5. Avoid any repetition with cached vocabulary (case-insensitive comparison)
+6. Include the coreTopicVocabulary from analysis if it's not already in the vocabulary
+7. Add a "tags" array to each node with the coreTopicVocabulary as a tag
+
+Output MUST be in JSON format:
+{
+  "nodes": [
+    {
+      "word": "单词", // Word in learning language ({{learningLanguage}})
+      "phonetic": "phonetic notation", // Phonetic/pronunciation: {{phoneticFormatInstruction}}
+      "meaning": "word meaning", // Meaning/explanation in system language ({{userLanguage}})
+      "tags": ["核心词"] // Tags array containing coreTopicVocabulary from analysis
+    },
+    ...
+  ]
+}
+
+Generate exactly vocabularyCount nodes. Do not generate links.`,
+      responseFormat: "json",
+      showResponse: true,
+    },
+    "Generate vocabulary nodes only"
+  );
+
+  // Node 3: Vocabulary Validation 1 - Validate vocabulary nodes only
+  const vocabularyValidation1 = createLLMNode(
+    "vocabulary-validation-1",
+    "Vocabulary Validation",
     {
       type: "extension-check",
       provider: llmConfig?.provider || "deepseek",
-      // apiKey is never stored in config - it's passed at execution time from cookies
       apiUrl: llmConfig?.apiUrl,
       model: llmConfig?.model,
       systemPrompt:
-        "You are a language learning assistant. Validate vocabulary lists for correctness.",
-      userPromptTemplate:
-        "Check if these vocabularies are correct and related to the analysis: {{input}}",
+        "You are a language learning assistant. Validate vocabulary nodes and meanings for correctness.",
+      userPromptTemplate: `Validate the vocabulary nodes for format and meaning correctness.
+
+Vocabulary Nodes:
+{{input}}
+
+Cached Vocabulary (learning language: {{learningLanguage}}):
+{{vocabularyCache}}
+
+Validation Rules (check only these):
+1. Each node must have a "word" field that is in learning language ({{learningLanguage}}) - original format, not translated
+2. Each node must have a "phonetic" field with pronunciation/phonetic notation
+3. Each node must have a "meaning" field that is in system language ({{userLanguage}})
+4. Word should not be empty or invalid
+5. Phonetic should not be empty or invalid
+6. Meaning should not be empty or invalid
+
+For each invalid node, output an issue in the format: "word: issue description"
+
+Output MUST be in JSON format:
+{
+  "is_valid": true/false,
+  "nodes": [...], // Same nodes as input (do not modify)
+  "issues": ["word1: issue description", "word2: issue description", ...] // Array of issues found (empty array if all valid)
+}
+
+Only output issues for nodes that are invalid. Do not modify the nodes.`,
       responseFormat: "json",
+      showResponse: false,
     },
-    "Validate vocabulary correctness"
+    "Validate vocabulary nodes format and meanings"
   );
 
-  // LLM node: Extension Relationship Analysis
-  const extensionRelationshipAnalysis = createLLMNode(
-    "extension-relationship-analysis",
-    "Extension Relationship Analysis",
+  // Pre-node 1: Clean Invalid Vocabulary Nodes (after validation 1)
+  const cleanInvalidVocabularyPreNode = createPreNode(
+    "clean-invalid-vocabulary-pre",
+    "Clean Invalid Vocabulary",
     {
-      type: "extension-relationship-analysis",
-      provider: llmConfig?.provider || "deepseek",
-      // apiKey is never stored in config - it's passed at execution time from cookies
-      apiUrl: llmConfig?.apiUrl,
-      model: llmConfig?.model,
-      systemPrompt:
-        "You are a language learning assistant. Analyze relationships between vocabulary words.",
-      userPromptTemplate:
-        "Define relationships for these words (固定搭配, 同义词, 同类词, 反义词, etc.): {{input}}",
-      responseFormat: "json",
+      type: "clean-invalid-vocabulary-nodes",
     },
-    "Analyze vocabulary relationships"
+    "Remove invalid vocabulary nodes based on validation issues"
   );
 
-  // LLM node: Extension Relationship Check
-  const extensionRelationshipCheck = createLLMNode(
-    "extension-relationship-check",
-    "Extension Relationship Check",
+  // Node 4: Vocabulary Generation 2 - Generate links only
+  const vocabularyGeneration2 = createLLMNode(
+    "vocabulary-generation-2",
+    "Link Generation",
     {
-      type: "extension-relationship-check",
+      type: "extension-analysis",
       provider: llmConfig?.provider || "deepseek",
-      // apiKey is never stored in config - it's passed at execution time from cookies
       apiUrl: llmConfig?.apiUrl,
       model: llmConfig?.model,
       systemPrompt:
-        "You are a language learning assistant. Validate vocabulary relationships.",
-      userPromptTemplate: "Check if these relationships are correct: {{input}}",
-      responseFormat: "json",
+        "You are a language learning assistant. Generate relationship links between vocabulary words.",
+      userPromptTemplate: `Generate relationship links for the vocabulary nodes.
+
+Vocabulary Nodes (from previous step):
+{{input}}
+
+Instructions:
+1. Use the nodes provided in the input - do not modify or regenerate them
+2. Generate links between vocabulary words based ONLY on these relationship types (in system language: {{userLanguage}}):
+   - 同义词 (synonym)
+   - 反义词 (antonym)
+   - 近义词 (near synonym)
+   - 同源词 (cognate)
+3. Only generate links if there is a clear relationship matching one of the above types
+4. Do not generate links for every word - only when a clear relationship exists
+5. All words in links (start and end) must be from the input nodes
+6. All words must be in learning language ({{learningLanguage}}) - original format
+
+You will receive vocabulary nodes as input. Generate links between these nodes.
+
+Output MUST be in JSON format with ONLY links (do not include nodes):
+{
+  "links": [
+    {
+      "start": "单词1", // Starting word (in learning language, from input nodes)
+      "end": "单词2", // Ending word (in learning language, from input nodes)
+      "relationship": "同义词" // Relationship type in system language ({{userLanguage}}): must be one of: 同义词, 反义词, 近义词, 同源词
     },
-    "Validate vocabulary relationships"
+    ...
+  ]
+}
+
+IMPORTANT: Only output links. Do not include nodes in output. Only generate links where a clear relationship exists matching one of the 4 types above. Do not generate links for all words.`,
+      responseFormat: "json",
+      showResponse: true,
+    },
+    "Generate relationship links between vocabulary words"
+  );
+
+  // Pre-node: Merge nodes and links, clean and complete
+  // Merge nodes from clean step with links from generation 2
+  // Remove 固定搭配 links, filter invalid links, add nodes without links to coreTopicVocabulary
+  const mergeNodesLinksPreNode = createPreNode(
+    "merge-nodes-links-pre",
+    "Merge and Complete Links",
+    {
+      type: "merge-vocabulary-nodes-links",
+    },
+    "Merge vocabulary nodes with generated links, filter invalid links, and add core topic links"
   );
 
   const flow = builder
-    .addNode(formatInput)
-    .addNode(extensionAnalysis)
-    .addNode(extensionCheck)
-    .addNode(extensionRelationshipAnalysis)
-    .addNode(extensionRelationshipCheck)
-    .addCondition({
-      nodeId: "extension-check",
-      condition: (result) => {
-        if (!result.success) return false;
-        const output = result.output as Record<string, unknown>;
-        return output.valid === true || output.isValid === true;
-      },
-      onTrue: "extension-relationship-analysis",
-      onFalse: "extension-analysis", // Go back to analysis if check fails
-    })
+    .addNode(vocabularyAnalysis)
+    .addNode(vocabularyGeneration1)
+    .addNode(vocabularyValidation1)
+    .addNode(cleanInvalidVocabularyPreNode)
+    .addNode(vocabularyGeneration2)
+    .addNode(mergeNodesLinksPreNode)
     .build();
 
-  // Apply options
+  // Add validation check for vocabulary-validation-1 node
+  // If invalid nodes > 20% of total, regenerate; otherwise proceed
   const finalState = flow.getState();
+  if (!finalState.config.validationChecks) {
+    finalState.config.validationChecks = [];
+  }
+  finalState.config.validationChecks.push({
+    nodeId: "vocabulary-validation-1",
+    check: (result) => {
+      if (!result.success) return false;
+      const output = result.output as Record<string, unknown>;
+      const issues = (output.issues as Array<unknown>) || [];
+      const nodes = (output.nodes as Array<unknown>) || [];
+
+      // If invalid nodes > 20% of total nodes, regenerate
+      const totalNodes = nodes.length;
+      const invalidCount = issues.length;
+      const invalidPercentage =
+        totalNodes > 0 ? (invalidCount / totalNodes) * 100 : 0;
+
+      // If more than 20% invalid, return false to trigger regeneration
+      if (invalidPercentage > 20) {
+        return false;
+      }
+
+      // Otherwise, proceed (even if there are some issues)
+      return true;
+    },
+    maxRetries: 3,
+    retryTargetNodeId: "vocabulary-generation-1",
+  });
+
+  // Apply options
   if (options?.continueOnFailure !== undefined) {
     finalState.config.continueOnFailure = options.continueOnFailure;
   }

@@ -63,7 +63,8 @@ export const DialogsList = ({ onSelectDialog, onClose }: DialogsListProps) => {
           ) : dialogs.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12">
               <p className="text-sm text-muted-foreground text-center px-4">
-                {t("noDialogs") || "No dialogs yet. Generate one to get started!"}
+                {t("noDialogs") ||
+                  "No dialogs yet. Generate one to get started!"}
               </p>
             </div>
           ) : (
@@ -103,4 +104,3 @@ export const DialogsList = ({ onSelectDialog, onClose }: DialogsListProps) => {
     </div>
   );
 };
-

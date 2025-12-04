@@ -31,6 +31,7 @@ type NoteDraft = {
 
 type VocabularyDraft = {
   word: string;
+  phonetic?: string;
   meaning?: string;
   notes?: string;
   tags?: string[];
@@ -193,6 +194,7 @@ export const useAppStore = create<AppState>()(
             id: createId(),
             word: draft.word,
             learningLanguage,
+            phonetic: draft.phonetic,
             meaning: draft.meaning,
             notes: draft.notes,
             tags: draft.tags ?? [],

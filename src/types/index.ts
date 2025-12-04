@@ -1,26 +1,32 @@
-export type ThemeMode = 'light' | 'dark' | 'system';
+export type ThemeMode = "light" | "dark" | "system";
 
-export type LanguageCode = 'en' | 'zh';
+export type LanguageCode = "en" | "zh";
 
-export type LearningLanguageCode = 
-  | 'english' 
-  | 'spanish' 
-  | 'french' 
-  | 'japanese' 
-  | 'chinese'
-  | 'cantonese'
-  | 'german'
-  | 'portuguese'
-  | 'italian'
-  | 'russian'
-  | 'korean'
-  | 'turkish'
-  | 'dutch'
-  | 'polish';
+export type LearningLanguageCode =
+  | "english"
+  | "spanish"
+  | "french"
+  | "japanese"
+  | "chinese"
+  | "cantonese"
+  | "german"
+  | "portuguese"
+  | "italian"
+  | "russian"
+  | "korean"
+  | "turkish"
+  | "dutch"
+  | "polish";
 
-export type ColorThemeKey = 'blue' | 'purple' | 'green' | 'grey';
+export type ColorThemeKey = "blue" | "purple" | "green" | "grey";
 
-export type RelationType = 'similar' | 'synonym' | 'antonym' | 'root' | 'homophone';
+export type RelationType =
+  | "similar"
+  | "synonym"
+  | "antonym"
+  | "root"
+  | "homophone"
+  | "topic";
 
 export interface TemplateSection {
   id: string;
@@ -57,6 +63,7 @@ export interface VocabularyEntry {
   id: string;
   word: string;
   learningLanguage: LearningLanguageCode;
+  phonetic?: string;
   meaning?: string;
   notes?: string;
   relations: VocabularyRelation[];
@@ -116,7 +123,7 @@ export interface DialogRecord {
   updatedAt: string;
 }
 
-export type LLMProvider = 'deepseek' | 'openai' | 'anthropic' | 'custom';
+export type LLMProvider = "deepseek" | "openai" | "anthropic" | "custom";
 
 export interface AIConfig {
   provider: LLMProvider;
@@ -124,4 +131,3 @@ export interface AIConfig {
   apiUrl?: string;
   model?: string;
 }
-

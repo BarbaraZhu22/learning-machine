@@ -629,26 +629,36 @@ export const DialogDisplay = ({
                     setTimeout(() => {
                       const readyCount = audioBuffersRef.current.size;
                       const bufferCount = allSentenceBuffersRef.current.size;
-                      const hasSentenceErrors = sentenceErrorsRef.current.length > 0;
+                      const hasSentenceErrors =
+                        sentenceErrorsRef.current.length > 0;
                       const audioComplete = isAudioComplete();
-                      
+
                       // Double check: if we have all buffers but isAudioComplete returns false,
                       // it might be a timing issue, give it another moment
-                      if (!hasSentenceErrors && !audioComplete && bufferCount >= expectedCount) {
+                      if (
+                        !hasSentenceErrors &&
+                        !audioComplete &&
+                        bufferCount >= expectedCount
+                      ) {
                         // Wait a bit more and check again
                         setTimeout(() => {
                           const finalAudioComplete = isAudioComplete();
-                          const finalBufferCount = allSentenceBuffersRef.current.size;
-                          const finalHasSentenceErrors = sentenceErrorsRef.current.length > 0;
-                          
-                          if (!finalAudioComplete && finalBufferCount < expectedCount) {
+                          const finalBufferCount =
+                            allSentenceBuffersRef.current.size;
+                          const finalHasSentenceErrors =
+                            sentenceErrorsRef.current.length > 0;
+
+                          if (
+                            !finalAudioComplete &&
+                            finalBufferCount < expectedCount
+                          ) {
                             setUnifiedAudioErrorText(
                               `Audio generation incomplete: ${finalBufferCount}/${expectedCount} sentences. Please try generating again.`
                             );
                           } else {
                             setUnifiedAudioErrorText(null);
                           }
-                          
+
                           // Cache audio data if complete and no errors
                           if (finalAudioComplete && !finalHasSentenceErrors) {
                             // Increment generation count on successful completion
@@ -657,12 +667,12 @@ export const DialogDisplay = ({
                               console.error("Failed to cache audio:", error);
                             });
                           }
-                          
+
                           setIsGeneratingAudio(false);
                         }, 200);
                         return;
                       }
-                      
+
                       // Only show incomplete error if there are no sentence errors
                       // If there are sentence errors, the user already sees specific error messages
                       if (!hasSentenceErrors && !audioComplete) {
@@ -672,12 +682,12 @@ export const DialogDisplay = ({
                         setIsGeneratingAudio(false);
                         return;
                       }
-                      
+
                       // If audio is complete or we have sentence errors, clear incomplete error
                       if (audioComplete || hasSentenceErrors) {
                         setUnifiedAudioErrorText(null);
                       }
-                      
+
                       // Cache audio data if complete and no errors
                       if (audioComplete && !hasSentenceErrors) {
                         // Increment generation count on successful completion
@@ -686,7 +696,7 @@ export const DialogDisplay = ({
                           console.error("Failed to cache audio:", error);
                         });
                       }
-                      
+
                       // Auto-play if audio is complete and we have enough sentences
                       if (
                         audioComplete &&

@@ -11,6 +11,7 @@ const RELATION_LABELS: Record<RelationType, string> = {
   antonym: 'Antonym',
   root: 'Root',
   homophone: 'Homophone',
+  topic: 'Topic Related',
 };
 
 type Position = { x: number; y: number };
